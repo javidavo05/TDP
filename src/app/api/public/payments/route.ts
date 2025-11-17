@@ -2,13 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { PaymentRepository } from "@/infrastructure/db/supabase/PaymentRepository";
 import { TicketRepository } from "@/infrastructure/db/supabase/TicketRepository";
 import { PaymentService } from "@/services/public/payments/PaymentService";
+import { PaymentProviderFactory } from "@/infrastructure/payments/PaymentProviderFactory";
 import { PaymentMethod } from "@/domain/types";
 
-// Note: Payment providers would be injected here
-// For now, we'll create a placeholder service
 const paymentRepository = new PaymentRepository();
 const ticketRepository = new TicketRepository();
-const paymentService = new PaymentService(paymentRepository, ticketRepository, []);
+const paymentService = new PaymentService(
+  paymentRepository,
+  ticketRepository,
+  PaymentProviderFactory.getAllProviders()
+);
 
 export async function POST(request: NextRequest) {
   try {
