@@ -2,6 +2,10 @@ import { IPaymentProvider } from "@/domain/interfaces";
 import { PaymentMethod } from "@/domain/types";
 import { YappyComercialProvider } from "./yappy/YappyComercialProvider";
 import { CashProvider } from "./cash/CashProvider";
+import { PagueloFacilProvider } from "./paguelofacil/PagueloFacilProvider";
+import { TilopayProvider } from "./tilopay/TilopayProvider";
+import { PayUProvider } from "./payu/PayUProvider";
+import { BanescoProvider } from "./banesco/BanescoProvider";
 
 export class PaymentProviderFactory {
   private static providers: Map<PaymentMethod, IPaymentProvider> = new Map();
@@ -20,7 +24,18 @@ export class PaymentProviderFactory {
       case "cash":
         provider = new CashProvider();
         break;
-      // TODO: Add other providers (PagueloFacil, Tilopay, PayU, Banesco)
+      case "paguelofacil":
+        provider = new PagueloFacilProvider();
+        break;
+      case "tilopay":
+        provider = new TilopayProvider();
+        break;
+      case "payu":
+        provider = new PayUProvider();
+        break;
+      case "banesco":
+        provider = new BanescoProvider();
+        break;
       default:
         throw new Error(`Payment provider not implemented for method: ${method}`);
     }
@@ -33,7 +48,10 @@ export class PaymentProviderFactory {
     return [
       new YappyComercialProvider(),
       new CashProvider(),
-      // TODO: Add other providers
+      new PagueloFacilProvider(),
+      new TilopayProvider(),
+      new PayUProvider(),
+      new BanescoProvider(),
     ];
   }
 }
