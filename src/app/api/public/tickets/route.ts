@@ -52,6 +52,19 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
+    const searchParams = request.nextUrl.searchParams;
+    const qr = searchParams.get("qr");
+
+    // If QR code is provided, search by QR
+    if (qr) {
+      const ticket = await ticketingService.getTicketByQR(qr);
+      if (!ticket) {
+        return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
+      }
+      return NextResponse.json({ ticket });
+    }
+
+    // Otherwise, get user tickets
     const supabase = await createClient();
     const {
       data: { user },
@@ -64,7 +77,6 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const searchParams = request.nextUrl.searchParams;
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "50");
     const offset = (page - 1) * limit;
