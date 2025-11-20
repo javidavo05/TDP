@@ -1,6 +1,8 @@
 import { IRealtimeProvider, RealtimeSubscription } from "@/domain/interfaces";
 import { createClient } from "@/lib/supabase/client";
 
+type PostgresChangeEvent = "INSERT" | "UPDATE" | "DELETE" | "*";
+
 export class SupabaseRealtimeAdapter implements IRealtimeProvider {
   private supabase = createClient();
 
@@ -11,9 +13,13 @@ export class SupabaseRealtimeAdapter implements IRealtimeProvider {
   ): RealtimeSubscription {
     const channelInstance = this.supabase.channel(channel);
 
-    channelInstance.on("postgres_changes", { event, schema: "public", table: channel }, (payload) => {
-      callback(payload.new as T);
-    });
+    channelInstance.on(
+      "postgres_changes",
+      { event: (event as PostgresChangeEvent) || "*", schema: "public", table: channel },
+      (payload) => {
+        callback(payload.new as T);
+      }
+    );
 
     channelInstance.subscribe();
 
