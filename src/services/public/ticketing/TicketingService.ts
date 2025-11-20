@@ -94,8 +94,8 @@ export class TicketingService {
       passengerPhone: data.passengerPhone,
       passengerEmail: data.passengerEmail,
       boardingStopId: data.boardingStopId,
-      passengerId,
-      passengerDocumentId: data.passengerDocumentId || null,
+      passengerId: passengerId || undefined,
+      passengerDocumentId: data.passengerDocumentId,
     });
 
     // Reserve seat in trip
