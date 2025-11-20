@@ -166,7 +166,7 @@ export default function PrinterSettingsPage() {
                   </TouchButton>
                   <TouchButton
                     onClick={handleTestPrint}
-                    disabled={!portPath || printerType === "none" || !status?.online}
+                    disabled={!portPath || !status?.online}
                     variant="secondary"
                     size="lg"
                     className="flex-1"
@@ -177,7 +177,7 @@ export default function PrinterSettingsPage() {
 
                 <TouchButton
                   onClick={handleSave}
-                  disabled={!portPath || printerType === "none"}
+                  disabled={!portPath}
                   variant="primary"
                   size="lg"
                   className="w-full"
