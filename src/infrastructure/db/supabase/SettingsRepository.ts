@@ -15,7 +15,9 @@ export interface ISettingsRepository {
   get(key: string): Promise<SystemSetting | null>;
   getAll(): Promise<SystemSetting[]>;
   getByCategory(category: SettingCategory): Promise<SystemSetting[]>;
+  getSettingsByCategory(category: SettingCategory): Promise<SystemSetting[]>;
   set(key: string, value: any, category: SettingCategory, description?: string): Promise<SystemSetting>;
+  updateSettings(settings: Record<string, any>): Promise<void>;
   delete(key: string): Promise<void>;
 }
 
@@ -103,6 +105,36 @@ export class SettingsRepository implements ISettingsRepository {
     }
 
     return this.mapToSetting(data);
+  }
+
+  async updateSettings(settings: Record<string, any>): Promise<void> {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    const updates = Object.entries(settings).map(([key, value]) => {
+      const category = (key.includes(".") ? key.split(".")[0] : "general") as SettingCategory;
+
+      const payload: Record<string, any> = {
+        key,
+        value,
+        category,
+        updated_at: new Date().toISOString(),
+      };
+
+      if (user) {
+        payload.updated_by = user.id;
+      }
+
+      return payload;
+    });
+
+    const { error } = await supabase.from("system_settings").upsert(updates, { onConflict: "key" });
+
+    if (error) {
+      throw new Error(`Failed to update settings: ${error.message}`);
+    }
   }
 
   async delete(key: string): Promise<void> {
