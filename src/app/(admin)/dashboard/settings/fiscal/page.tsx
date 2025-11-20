@@ -134,7 +134,7 @@ export default function FiscalSettingsPage() {
                   </TouchButton>
                   <TouchButton
                     onClick={handleSave}
-                    disabled={!portPath || printerType === "none"}
+                    disabled={!portPath}
                     variant="primary"
                     size="lg"
                     className="flex-1"
