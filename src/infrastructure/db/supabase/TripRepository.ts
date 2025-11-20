@@ -155,6 +155,20 @@ export class TripRepository implements ITripRepository {
     return this.mapToEntity(data);
   }
 
+  async updateLocation(tripId: string, location: { latitude: number; longitude: number; lastUpdate: Date }): Promise<void> {
+    const supabase = await createClient();
+    const { error } = await supabase
+      .from("trips")
+      .update({
+        current_latitude: location.latitude,
+        current_longitude: location.longitude,
+        location_updated_at: location.lastUpdate.toISOString(),
+      })
+      .eq("id", tripId);
+
+    if (error) throw new Error(`Failed to update trip location: ${error.message}`);
+  }
+
   async delete(id: string): Promise<void> {
     const supabase = await createClient();
     const { error } = await supabase.from("trips").delete().eq("id", id);

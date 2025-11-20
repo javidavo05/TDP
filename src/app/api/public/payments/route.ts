@@ -1,15 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PaymentRepository } from "@/infrastructure/db/supabase/PaymentRepository";
 import { TicketRepository } from "@/infrastructure/db/supabase/TicketRepository";
+import { TripRepository } from "@/infrastructure/db/supabase/TripRepository";
 import { PaymentService } from "@/services/public/payments/PaymentService";
 import { PaymentProviderFactory } from "@/infrastructure/payments/PaymentProviderFactory";
 import { PaymentMethod } from "@/domain/types";
 
 const paymentRepository = new PaymentRepository();
 const ticketRepository = new TicketRepository();
+const tripRepository = new TripRepository();
 const paymentService = new PaymentService(
   paymentRepository,
   ticketRepository,
+  tripRepository,
   PaymentProviderFactory.getAllProviders()
 );
 

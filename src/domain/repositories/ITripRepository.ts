@@ -9,6 +9,7 @@ export interface ITripRepository {
   findUpcoming(hours?: number): Promise<Trip[]>;
   create(trip: Trip): Promise<Trip>;
   update(trip: Trip): Promise<Trip>;
+  updateLocation(tripId: string, location: { latitude: number; longitude: number; lastUpdate: Date }): Promise<void>;
   delete(id: string): Promise<void>;
 }
 

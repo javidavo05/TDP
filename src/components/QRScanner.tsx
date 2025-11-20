@@ -34,10 +34,19 @@ export function QRScanner({
             fps,
             qrbox,
           },
-          (decodedText) => {
-            onScanSuccess(decodedText);
-            setScanning(false);
-            scanner.stop();
+          async (decodedText) => {
+            try {
+              // Stop scanner before calling callback to avoid DOM errors
+              await scanner.stop();
+              setScanning(false);
+              // Call callback after stopping
+              onScanSuccess(decodedText);
+            } catch (stopError) {
+              // If stop fails, still call callback and try to clean up
+              console.warn("Error stopping scanner:", stopError);
+              setScanning(false);
+              onScanSuccess(decodedText);
+            }
           },
           (errorMessage) => {
             if (onScanError) {
@@ -61,14 +70,20 @@ export function QRScanner({
 
     return () => {
       if (scannerRef.current) {
-        scannerRef.current
-          .stop()
-          .then(() => {
+        const currentScanner = scannerRef.current;
+        // Use a timeout to ensure DOM is stable
+        setTimeout(async () => {
+          try {
+            if (currentScanner && containerRef.current) {
+              await currentScanner.stop();
+            }
+          } catch (err) {
+            // Ignore cleanup errors
+            console.warn("Error during scanner cleanup:", err);
+          } finally {
             scannerRef.current = null;
-          })
-          .catch(() => {
-            // Ignore stop errors
-          });
+          }
+        }, 100);
       }
     };
   }, [fps, qrbox, onScanSuccess, onScanError]);

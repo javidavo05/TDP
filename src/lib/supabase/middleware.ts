@@ -37,16 +37,38 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
+  // Allow public routes without authentication
+  const publicRoutes = [
+    "/",
+    "/search",
+    "/trips",
+    "/checkout",
+    "/tickets", // Only for viewing individual tickets (sharing) - /tickets/[id]
+    "/login",
+    "/displays",
+    "/api/public",
+    "/api/mobile",
+  ];
+
+  const isPublicRoute = publicRoutes.some((route) =>
+    request.nextUrl.pathname.startsWith(route)
+  );
+
+  // Protect /profile route - requires authentication
+  if (!user && request.nextUrl.pathname.startsWith("/profile")) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/";
+    return NextResponse.redirect(url);
+  }
+
+  // Only redirect to login if it's an admin route and user is not authenticated
   if (
     !user &&
-    !request.nextUrl.pathname.startsWith("/search") &&
-    !request.nextUrl.pathname.startsWith("/api/public") &&
-    !request.nextUrl.pathname.startsWith("/displays") &&
-    request.nextUrl.pathname !== "/"
+    !isPublicRoute &&
+    request.nextUrl.pathname.startsWith("/dashboard")
   ) {
-    // no user, potentially respond by redirecting the user to the login page
     const url = request.nextUrl.clone();
-    url.pathname = "/search";
+    url.pathname = "/login";
     return NextResponse.redirect(url);
   }
 

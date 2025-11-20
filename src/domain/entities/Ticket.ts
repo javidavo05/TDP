@@ -18,6 +18,8 @@ export class Ticket {
     public itbms: number,
     public totalPrice: number,
     public boardedAt: Date | null,
+    public passengerId: string | null,
+    public passengerDocumentId: string | null,
     public createdAt: Date,
     public updatedAt: Date
   ) {}
@@ -33,6 +35,8 @@ export class Ticket {
     passengerPhone?: string;
     passengerEmail?: string;
     boardingStopId?: string;
+    passengerId?: string;
+    passengerDocumentId?: string;
   }): Ticket {
     const now = new Date();
     const qrCode = Ticket.generateQRCode();
@@ -55,6 +59,8 @@ export class Ticket {
       data.itbms,
       totalPrice,
       null,
+      data.passengerId || null,
+      data.passengerDocumentId || null,
       now,
       now
     );

@@ -4,6 +4,7 @@
 /node_modules
 /.pnp
 .pnp.js
+.yarn/install-state.gz
 
 # testing
 /coverage
@@ -14,6 +15,8 @@
 
 # production
 /build
+/dist
+/dist-electron
 
 # misc
 .DS_Store
@@ -35,12 +38,13 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# PWA
-**/public/sw.js
-**/public/sw.js.map
-**/public/workbox-*.js
-**/public/workbox-*.js.map
+# electron
+electron/dist
+electron/out
 
-# Supabase
-.supabase
-
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~

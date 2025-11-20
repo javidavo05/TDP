@@ -90,6 +90,13 @@ PAYU_WEBHOOK_URL=https://tu-dominio.com/api/public/payments/payu/webhook
 BANESCO_API_KEY=tu_banesco_api_key
 BANESCO_WEBHOOK_URL=https://tu-dominio.com/api/public/payments/banesco/webhook
 
+# Resend Email Service Configuration
+# Get your API key from https://resend.com/api-keys
+RESEND_API_KEY=re_your_api_key_here
+# For testing/development, you can use: onboarding@resend.dev (no domain verification needed)
+# For production, use a verified domain email like: noreply@tdp.com
+RESEND_FROM_EMAIL=onboarding@resend.dev
+
 # App Configuration
 NEXT_PUBLIC_APP_URL=https://tu-dominio.com
 ITBMS_RATE=0.07

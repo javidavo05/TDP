@@ -44,6 +44,17 @@ export async function POST(
     ticket.markAsBoarded();
     const updatedTicket = await ticketRepository.update(ticket);
 
+    // Create trip manifest entry if passenger_id exists
+    if (updatedTicket.passengerId) {
+      const supabase = await createClient();
+      await supabase.from("trip_manifest").insert({
+        trip_id: updatedTicket.tripId,
+        ticket_id: updatedTicket.id,
+        passenger_id: updatedTicket.passengerId,
+        validated_by: user.id,
+      });
+    }
+
     return NextResponse.json({ ticket: updatedTicket, success: true });
   } catch (error) {
     console.error("Error validating ticket:", error);

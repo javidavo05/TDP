@@ -8,8 +8,9 @@ export interface ITicketRepository {
   findByUser(userId: string, params?: PaginationParams): Promise<PaginatedResponse<Ticket>>;
   findByTrip(tripId: string): Promise<Ticket[]>;
   findBySeat(seatId: string, tripId: string): Promise<Ticket | null>;
-  create(ticket: Ticket): Promise<Ticket>;
-  update(ticket: Ticket): Promise<Ticket>;
+  findByTerminalAndDate(terminalId: string, startDate: Date, endDate: Date): Promise<Ticket[]>;
+  create(ticket: Partial<Ticket>): Promise<Ticket>;
+  update(id: string, ticket: Partial<Ticket>): Promise<Ticket>;
   delete(id: string): Promise<void>;
   countByTrip(tripId: string): Promise<number>;
 }

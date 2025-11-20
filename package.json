@@ -2,42 +2,89 @@
   "name": "tdp-ticketing-system",
   "version": "0.1.0",
   "private": true,
+  "main": "electron/main.js",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
     "type-check": "tsc --noEmit",
-    "generate-types": "supabase gen types typescript --local > src/lib/supabase/database.types.ts"
+    "generate-types": "supabase gen types typescript --local > src/lib/supabase/database.types.ts",
+    "seed:users": "tsx scripts/seed-users.ts",
+    "test:email": "tsx scripts/test-email.ts",
+    "generate-icons": "tsx scripts/generate-icons.ts",
+    "electron:dev": "cross-env NODE_ENV=development concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron electron/main.js\"",
+    "electron:build": "next build && electron-builder",
+    "electron:build:win": "next build && electron-builder --win",
+    "electron:pack": "next build && electron-builder --dir"
   },
   "dependencies": {
-    "next": "^14.2.0",
-    "react": "^18.3.0",
-    "react-dom": "^18.3.0",
-    "@supabase/supabase-js": "^2.39.0",
     "@supabase/ssr": "^0.1.0",
-    "zod": "^3.22.4",
+    "@supabase/supabase-js": "^2.39.0",
+    "@types/qrcode": "^1.5.6",
+    "@zxing/library": "^0.20.0",
+    "class-variance-authority": "^0.7.0",
+    "clsx": "^2.1.0",
     "date-fns": "^3.3.1",
     "html5-qrcode": "^2.3.8",
-    "@zxing/library": "^0.20.0",
+    "lucide-react": "^0.344.0",
+    "next": "^14.2.0",
     "next-pwa": "^5.6.0",
-    "clsx": "^2.1.0",
+    "qrcode": "^1.5.4",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "resend": "^6.4.2",
     "tailwind-merge": "^2.2.0",
-    "class-variance-authority": "^0.7.0",
-    "lucide-react": "^0.344.0"
+    "zod": "^3.22.4"
   },
   "devDependencies": {
-    "typescript": "^5.4.0",
     "@types/node": "^20.11.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "autoprefixer": "^10.4.17",
-    "postcss": "^8.4.33",
-    "tailwindcss": "^3.4.1",
+    "concurrently": "^8.2.2",
+    "cross-env": "^10.1.0",
+    "dotenv": "^17.2.3",
+    "electron": "^28.3.3",
+    "electron-builder": "^24.13.3",
     "eslint": "^8.56.0",
     "eslint-config-next": "^14.2.0",
+    "postcss": "^8.4.33",
     "prettier": "^3.2.5",
-    "prettier-plugin-tailwindcss": "^0.5.11"
+    "prettier-plugin-tailwindcss": "^0.5.11",
+    "sharp": "^0.34.5",
+    "tailwindcss": "^3.4.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.4.0",
+    "wait-on": "^7.2.0"
+  },
+  "build": {
+    "appId": "com.tdp.ticketing",
+    "productName": "TDP Ticketing POS",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      ".next/**/*",
+      "public/**/*",
+      "electron/**/*",
+      "package.json",
+      "node_modules/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "public/icon-512x512.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
   }
 }
-

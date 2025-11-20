@@ -89,11 +89,44 @@ export class TicketRepository implements ITicketRepository {
     return this.mapToEntity(data);
   }
 
-  async create(ticket: Ticket): Promise<Ticket> {
+  async findByTerminalAndDate(terminalId: string, startDate: Date, endDate: Date): Promise<Ticket[]> {
     const supabase = await createClient();
     const { data, error } = await supabase
       .from("tickets")
-      .insert(this.mapToDatabase(ticket))
+      .select("*")
+      .eq("terminal_id", terminalId)
+      .gte("created_at", startDate.toISOString())
+      .lte("created_at", endDate.toISOString())
+      .order("created_at", { ascending: false });
+
+    if (error) throw new Error(`Failed to find tickets by terminal and date: ${error.message}`);
+    return (data || []).map((d: any) => this.mapToEntity(d));
+  }
+
+  async create(ticket: Partial<Ticket>): Promise<Ticket> {
+    const supabase = await createClient();
+    const ticketData = {
+      id: ticket.id || crypto.randomUUID(),
+      user_id: ticket.userId || null,
+      trip_id: ticket.tripId!,
+      seat_id: ticket.seatId!,
+      qr_code: ticket.qrCode || this.generateQRCode(),
+      qr_token: ticket.qrToken || this.generateToken(),
+      status: ticket.status || "pending",
+      passenger_name: ticket.passengerName!,
+      passenger_phone: ticket.passengerPhone || null,
+      passenger_email: ticket.passengerEmail || null,
+      boarding_stop_id: ticket.boardingStopId || null,
+      destination_stop_id: ticket.destinationStopId!,
+      price: ticket.price?.toString() || "0",
+      itbms: ticket.itbms?.toString() || "0",
+      total_price: ticket.totalPrice?.toString() || ticket.price?.toString() || "0",
+      boarded_at: ticket.boardedAt?.toISOString() || null,
+    };
+
+    const { data, error } = await supabase
+      .from("tickets")
+      .insert(ticketData)
       .select()
       .single();
 
@@ -101,17 +134,33 @@ export class TicketRepository implements ITicketRepository {
     return this.mapToEntity(data);
   }
 
-  async update(ticket: Ticket): Promise<Ticket> {
+  async update(id: string, ticket: Partial<Ticket>): Promise<Ticket> {
     const supabase = await createClient();
+    const updateData: any = {};
+    
+    if (ticket.status !== undefined) updateData.status = ticket.status;
+    if (ticket.boardedAt !== undefined) updateData.boarded_at = ticket.boardedAt?.toISOString() || null;
+    if (ticket.passengerName !== undefined) updateData.passenger_name = ticket.passengerName;
+    if (ticket.passengerPhone !== undefined) updateData.passenger_phone = ticket.passengerPhone;
+    if (ticket.passengerEmail !== undefined) updateData.passenger_email = ticket.passengerEmail;
+
     const { data, error } = await supabase
       .from("tickets")
-      .update(this.mapToDatabase(ticket))
-      .eq("id", ticket.id)
+      .update(updateData)
+      .eq("id", id)
       .select()
       .single();
 
     if (error) throw new Error(`Failed to update ticket: ${error.message}`);
     return this.mapToEntity(data);
+  }
+
+  private generateQRCode(): string {
+    return `TDP-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+  }
+
+  private generateToken(): string {
+    return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
   }
 
   async delete(id: string): Promise<void> {
@@ -151,6 +200,8 @@ export class TicketRepository implements ITicketRepository {
       parseFloat(data.itbms),
       parseFloat(data.total_price),
       data.boarded_at ? new Date(data.boarded_at) : null,
+      data.passenger_id || null,
+      data.passenger_document_id || null,
       new Date(data.created_at),
       new Date(data.updated_at)
     );
@@ -174,6 +225,8 @@ export class TicketRepository implements ITicketRepository {
       itbms: ticket.itbms.toString(),
       total_price: ticket.totalPrice.toString(),
       boarded_at: ticket.boardedAt?.toISOString() || null,
+      passenger_id: ticket.passengerId,
+      passenger_document_id: ticket.passengerDocumentId,
     };
   }
 }

@@ -1,13 +1,21 @@
 import { Ticket, Trip } from "@/domain/entities";
-import { ITicketRepository, ITripRepository } from "@/domain/repositories";
+import { ITicketRepository, ITripRepository, IPassengerRepository } from "@/domain/repositories";
 import { TripSearchFilters, TicketStatus, PaginationParams, PaginatedResponse } from "@/domain/types";
 import { calculateITBMS, ITBMS_RATE } from "@/lib/constants";
+import { PassengerService } from "@/services/admin/PassengerService";
 
 export class TicketingService {
+  private passengerService: PassengerService | null = null;
+
   constructor(
     private ticketRepository: ITicketRepository,
-    private tripRepository: ITripRepository
-  ) {}
+    private tripRepository: ITripRepository,
+    passengerRepository?: IPassengerRepository
+  ) {
+    if (passengerRepository) {
+      this.passengerService = new PassengerService(passengerRepository);
+    }
+  }
 
   async searchTrips(
     filters: TripSearchFilters,
@@ -34,6 +42,8 @@ export class TicketingService {
     passengerPhone?: string;
     passengerEmail?: string;
     boardingStopId?: string;
+    passengerDocumentId?: string;
+    passengerDocumentType?: "cedula" | "pasaporte";
   }): Promise<Ticket> {
     // Verify trip exists and is available
     const trip = await this.tripRepository.findById(data.tripId);
@@ -51,6 +61,24 @@ export class TicketingService {
       throw new Error("Seat is already taken");
     }
 
+    // Find or create passenger if document is provided
+    let passengerId: string | null = null;
+    if (data.passengerDocumentId && data.passengerDocumentType && this.passengerService) {
+      try {
+        const passenger = await this.passengerService.findOrCreatePassenger({
+          documentId: data.passengerDocumentId,
+          documentType: data.passengerDocumentType,
+          fullName: data.passengerName,
+          phone: data.passengerPhone,
+          email: data.passengerEmail,
+        });
+        passengerId = passenger.id;
+      } catch (error) {
+        console.warn("Failed to create/find passenger:", error);
+        // Continue without passenger if creation fails
+      }
+    }
+
     // Calculate ITBMS
     const itbms = calculateITBMS(data.price, ITBMS_RATE);
 
@@ -66,6 +94,8 @@ export class TicketingService {
       passengerPhone: data.passengerPhone,
       passengerEmail: data.passengerEmail,
       boardingStopId: data.boardingStopId,
+      passengerId,
+      passengerDocumentId: data.passengerDocumentId || null,
     });
 
     // Reserve seat in trip

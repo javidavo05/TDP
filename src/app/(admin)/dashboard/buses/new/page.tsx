@@ -2,10 +2,22 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { SeatMapEditor } from "@/components/bus/SeatMapEditor";
+
+interface Seat {
+  id: string;
+  number: string;
+  x: number;
+  y: number;
+  type: "single" | "double" | "aisle";
+  row: number;
+  column: number;
+}
 
 export default function NewBusWizardPage() {
   const router = useRouter();
   const [step, setStep] = useState(1);
+  const [seats, setSeats] = useState<Seat[]>([]);
   const [formData, setFormData] = useState({
     plateNumber: "",
     model: "",
@@ -21,8 +33,48 @@ export default function NewBusWizardPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Implement bus creation
-    router.push("/dashboard/buses");
+    
+    if (seats.length === 0) {
+      alert("Debes crear al menos un asiento en el paso 2");
+      setStep(2);
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/admin/buses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          plateNumber: formData.plateNumber,
+          model: formData.model,
+          year: formData.year ? parseInt(formData.year) : null,
+          capacity: parseInt(formData.capacity),
+          busClass: formData.busClass,
+          features: formData.features,
+          seatMap: {
+            seats: seats.map((seat) => ({
+              id: seat.id,
+              number: seat.number,
+              x: seat.x,
+              y: seat.y,
+              type: seat.type,
+              row: seat.row,
+              column: seat.column,
+            })),
+          },
+        }),
+      });
+
+      if (response.ok) {
+        router.push("/dashboard/buses");
+      } else {
+        const error = await response.json();
+        alert(`Error: ${error.error || "Error al crear el bus"}`);
+      }
+    } catch (error) {
+      console.error("Error creating bus:", error);
+      alert("Error al crear el bus");
+    }
   };
 
   return (
@@ -54,7 +106,7 @@ export default function NewBusWizardPage() {
             </div>
           </div>
 
-          <form onSubmit={handleSubmit} className="bg-card p-6 rounded-lg shadow-md">
+          <form onSubmit={handleSubmit} className="bg-card border border-border rounded-xl p-8 shadow-lg">
             {step === 1 && (
               <div className="space-y-4">
                 <h2 className="text-xl font-semibold mb-4">Información Básica</h2>
@@ -65,7 +117,7 @@ export default function NewBusWizardPage() {
                     required
                     value={formData.plateNumber}
                     onChange={(e) => setFormData({ ...formData, plateNumber: e.target.value })}
-                    className="w-full p-2 border rounded"
+                    className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
                   />
                 </div>
                 <div>
@@ -74,7 +126,7 @@ export default function NewBusWizardPage() {
                     type="text"
                     value={formData.model}
                     onChange={(e) => setFormData({ ...formData, model: e.target.value })}
-                    className="w-full p-2 border rounded"
+                    className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
                   />
                 </div>
                 <div>
@@ -83,7 +135,7 @@ export default function NewBusWizardPage() {
                     type="number"
                     value={formData.year}
                     onChange={(e) => setFormData({ ...formData, year: e.target.value })}
-                    className="w-full p-2 border rounded"
+                    className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
                   />
                 </div>
                 <div>
@@ -93,7 +145,7 @@ export default function NewBusWizardPage() {
                     required
                     value={formData.capacity}
                     onChange={(e) => setFormData({ ...formData, capacity: e.target.value })}
-                    className="w-full p-2 border rounded"
+                    className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
                   />
                 </div>
               </div>
@@ -101,15 +153,25 @@ export default function NewBusWizardPage() {
 
             {step === 2 && (
               <div className="space-y-4">
-                <h2 className="text-xl font-semibold mb-4">Editor de Asientos</h2>
-                <div className="bg-muted p-8 rounded-lg text-center">
-                  <p className="text-muted-foreground mb-4">
-                    Editor visual de asientos (drag & drop)
-                  </p>
-                  <p className="text-sm">
-                    Esta funcionalidad permitirá diseñar el layout de asientos del bus
-                  </p>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xl font-semibold">Editor Visual de Asientos</h2>
+                  <div className="text-sm text-muted-foreground">
+                    {seats.length} asientos creados
+                  </div>
                 </div>
+                <div className="bg-card border border-border rounded-lg p-4">
+                  <SeatMapEditor
+                    initialSeats={seats}
+                    onSeatsChange={setSeats}
+                  />
+                </div>
+                {seats.length === 0 && (
+                  <div className="bg-warning/10 border border-warning/20 rounded-lg p-4">
+                    <p className="text-sm text-warning">
+                      ⚠️ Debes crear al menos un asiento para continuar
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 
@@ -121,7 +183,7 @@ export default function NewBusWizardPage() {
                   <select
                     value={formData.busClass}
                     onChange={(e) => setFormData({ ...formData, busClass: e.target.value })}
-                    className="w-full p-2 border rounded"
+                    className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
                   >
                     <option value="economico">Económico</option>
                     <option value="ejecutivo">Ejecutivo</option>
@@ -154,12 +216,52 @@ export default function NewBusWizardPage() {
 
             {step === 4 && (
               <div className="space-y-4">
-                <h2 className="text-xl font-semibold mb-4">Resumen</h2>
-                <div className="bg-muted p-4 rounded-lg space-y-2">
-                  <p><strong>Placa:</strong> {formData.plateNumber}</p>
-                  <p><strong>Modelo:</strong> {formData.model || "N/A"}</p>
-                  <p><strong>Capacidad:</strong> {formData.capacity}</p>
-                  <p><strong>Clase:</strong> {formData.busClass}</p>
+                <h2 className="text-xl font-semibold mb-4">Resumen y Confirmación</h2>
+                <div className="bg-card border border-border rounded-lg p-6 space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-muted-foreground mb-1">Placa</p>
+                      <p className="font-semibold">{formData.plateNumber}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground mb-1">Modelo</p>
+                      <p className="font-semibold">{formData.model || "N/A"}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground mb-1">Año</p>
+                      <p className="font-semibold">{formData.year || "N/A"}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground mb-1">Capacidad</p>
+                      <p className="font-semibold">{formData.capacity} asientos</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground mb-1">Clase</p>
+                      <p className="font-semibold capitalize">{formData.busClass}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground mb-1">Asientos Configurados</p>
+                      <p className="font-semibold">{seats.length}</p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-2">Servicios</p>
+                    <div className="flex gap-2">
+                      {formData.features.wifi && (
+                        <span className="px-3 py-1 bg-primary/10 text-primary rounded-full text-xs">WiFi</span>
+                      )}
+                      {formData.features.ac && (
+                        <span className="px-3 py-1 bg-primary/10 text-primary rounded-full text-xs">A/C</span>
+                      )}
+                      {formData.features.bathroom && (
+                        <span className="px-3 py-1 bg-primary/10 text-primary rounded-full text-xs">Baño</span>
+                      )}
+                      {!formData.features.wifi && !formData.features.ac && !formData.features.bathroom && (
+                        <span className="text-sm text-muted-foreground">Ninguno</span>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -169,7 +271,7 @@ export default function NewBusWizardPage() {
                 <button
                   type="button"
                   onClick={() => setStep(step - 1)}
-                  className="px-6 py-2 border rounded hover:bg-muted"
+                  className="px-6 py-2 border border-border rounded-lg hover:bg-muted transition-colors"
                 >
                   Anterior
                 </button>
@@ -178,15 +280,21 @@ export default function NewBusWizardPage() {
                 {step < 4 ? (
                   <button
                     type="button"
-                    onClick={() => setStep(step + 1)}
-                    className="px-6 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90"
+                    onClick={() => {
+                      if (step === 2 && seats.length === 0) {
+                        alert("Debes crear al menos un asiento para continuar");
+                        return;
+                      }
+                      setStep(step + 1);
+                    }}
+                    className="px-6 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary-dark transition-colors font-semibold"
                   >
                     Siguiente
                   </button>
                 ) : (
                   <button
                     type="submit"
-                    className="px-6 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90"
+                    className="px-6 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary-dark transition-colors font-semibold"
                   >
                     Crear Bus
                   </button>

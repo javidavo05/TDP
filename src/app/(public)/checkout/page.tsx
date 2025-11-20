@@ -15,6 +15,8 @@ export default function CheckoutPage() {
     passengerName: "",
     passengerEmail: "",
     passengerPhone: "",
+    passengerDocumentId: "",
+    passengerDocumentType: "cedula" as "cedula" | "pasaporte",
     paymentMethod: "yappy" as string,
   });
 
@@ -56,6 +58,8 @@ export default function CheckoutPage() {
           passengerName: formData.passengerName,
           passengerEmail: formData.passengerEmail,
           passengerPhone: formData.passengerPhone,
+          passengerDocumentId: formData.passengerDocumentId,
+          passengerDocumentType: formData.passengerDocumentType,
           price: trip.price,
           destinationStopId: trip.routeId, // This should come from trip data
         }),
@@ -154,6 +158,36 @@ export default function CheckoutPage() {
                     className="w-full p-2 border rounded"
                   />
                 </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">Tipo de Documento *</label>
+                  <select
+                    required
+                    value={formData.passengerDocumentType}
+                    onChange={(e) => setFormData({ ...formData, passengerDocumentType: e.target.value as "cedula" | "pasaporte" })}
+                    className="w-full p-2 border rounded"
+                  >
+                    <option value="cedula">Cédula</option>
+                    <option value="pasaporte">Pasaporte</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    {formData.passengerDocumentType === "cedula" ? "Cédula" : "Pasaporte"} *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.passengerDocumentId}
+                    onChange={(e) => setFormData({ ...formData, passengerDocumentId: e.target.value })}
+                    placeholder={formData.passengerDocumentType === "cedula" ? "8-1234-5678" : "A123456"}
+                    className="w-full p-2 border rounded"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {formData.passengerDocumentType === "cedula" 
+                      ? "Formato: 8-1234-5678" 
+                      : "Formato: A123456 (6-9 caracteres alfanuméricos)"}
+                  </p>
+                </div>
               </div>
             </div>
 
@@ -195,7 +229,7 @@ export default function CheckoutPage() {
               </div>
               <button
                 type="submit"
-                disabled={processing || !formData.passengerName}
+                disabled={processing || !formData.passengerName || !formData.passengerDocumentId}
                 className="w-full px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 font-semibold disabled:opacity-50"
               >
                 {processing ? "Procesando..." : "Completar Compra"}

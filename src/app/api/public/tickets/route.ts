@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { TicketRepository } from "@/infrastructure/db/supabase/TicketRepository";
 import { TripRepository } from "@/infrastructure/db/supabase/TripRepository";
+import { PassengerRepository } from "@/infrastructure/db/supabase/PassengerRepository";
 import { TicketingService } from "@/services/public/ticketing/TicketingService";
 import { createClient } from "@/lib/supabase/server";
 
 const ticketRepository = new TicketRepository();
 const tripRepository = new TripRepository();
-const ticketingService = new TicketingService(ticketRepository, tripRepository);
+const passengerRepository = new PassengerRepository();
+const ticketingService = new TicketingService(ticketRepository, tripRepository, passengerRepository);
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,6 +22,8 @@ export async function POST(request: NextRequest) {
       passengerPhone,
       passengerEmail,
       boardingStopId,
+      passengerDocumentId,
+      passengerDocumentType,
     } = body;
 
     // Get user if authenticated
@@ -38,6 +42,8 @@ export async function POST(request: NextRequest) {
       passengerPhone,
       passengerEmail,
       boardingStopId,
+      passengerDocumentId,
+      passengerDocumentType,
     });
 
     return NextResponse.json({ ticket }, { status: 201 });
@@ -83,7 +89,36 @@ export async function GET(request: NextRequest) {
 
     const result = await ticketingService.getUserTickets(user.id, { page, limit, offset });
 
-    return NextResponse.json(result);
+    // Enrich tickets with trip and seat information
+    const enrichedTickets = await Promise.all(
+      result.data.map(async (ticket) => {
+        const trip = await tripRepository.findById(ticket.tripId);
+        
+        // Get seat info (simplified - would need SeatRepository)
+        const seat = { number: "N/A" }; // TODO: Fetch from seats table
+        
+        // Get route info for origin/destination (simplified)
+        const tripInfo = trip
+          ? {
+              origin: "Origen", // TODO: Get from route
+              destination: "Destino", // TODO: Get from route
+              departureTime: trip.departureTime,
+              arrivalTime: trip.arrivalEstimate,
+            }
+          : null;
+
+        return {
+          ...ticket,
+          trip: tripInfo,
+          seat,
+        };
+      })
+    );
+
+    return NextResponse.json({
+      ...result,
+      data: enrichedTickets,
+    });
   } catch (error) {
     console.error("Error fetching tickets:", error);
     return NextResponse.json(

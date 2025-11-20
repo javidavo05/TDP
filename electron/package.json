@@ -1,0 +1,12 @@
+{
+  "name": "tdp-pos-terminal",
+  "version": "1.0.0",
+  "description": "TDP POS Terminal Application",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "author": "TDP Ticketing System",
+  "license": "MIT"
+}
+
