@@ -1,5 +1,6 @@
 import { IRealtimeProvider, RealtimeSubscription } from "@/domain/interfaces";
 import { createClient } from "@/lib/supabase/client";
+import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 
 type PostgresChangeEvent = "INSERT" | "UPDATE" | "DELETE" | "*";
 
@@ -20,7 +21,7 @@ export class SupabaseRealtimeAdapter implements IRealtimeProvider {
         schema: "public",
         table: channel,
       } as any,
-      (payload) => {
+      (payload: RealtimePostgresChangesPayload<any>) => {
         callback(payload.new as T);
       }
     );
