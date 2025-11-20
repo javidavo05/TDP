@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { UserRepository } from "@/infrastructure/db/supabase/UserRepository";
+import { User } from "@/domain/entities";
 
 export async function GET(request: NextRequest) {
   try {
@@ -17,12 +18,12 @@ export async function GET(request: NextRequest) {
     let user = await userRepository.findByEmail(authUser.email!);
 
     if (!user) {
-      // Create user if doesn't exist
-      user = await userRepository.create({
-        email: authUser.email!,
+      const newUser = User.create({
+        email: authUser.email || undefined,
         role: "passenger",
-        fullName: authUser.user_metadata?.full_name || authUser.email?.split("@")[0],
+        fullName: authUser.user_metadata?.full_name || authUser.email?.split("@")[0] || undefined,
       });
+      user = await userRepository.create(newUser);
     }
 
     return NextResponse.json({ user });
