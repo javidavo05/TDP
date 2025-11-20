@@ -1,10 +1,32 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Fragment } from "react";
 import { TouchSeatSelector } from "@/components/pos/TouchSeatSelector";
 import { TouchButton } from "@/components/pos/TouchButton";
 import { format } from "date-fns";
 import Link from "next/link";
+
+type Step = "trip" | "seat" | "passenger" | "confirm";
+type StepStatus = "current" | "completed" | "upcoming";
+
+const STEP_SEQUENCE: Step[] = ["trip", "seat", "passenger", "confirm"];
+const STEP_META: Array<{ id: Step; label: string; number: string }> = [
+  { id: "trip", label: "Viaje", number: "1" },
+  { id: "seat", label: "Asiento", number: "2" },
+  { id: "passenger", label: "Pasajero", number: "3" },
+];
+
+const STATUS_TEXT_CLASS: Record<StepStatus, string> = {
+  current: "text-primary",
+  completed: "text-success",
+  upcoming: "text-muted-foreground",
+};
+
+const STATUS_CIRCLE_CLASS: Record<StepStatus, string> = {
+  current: "bg-primary text-primary-foreground",
+  completed: "bg-success text-success-foreground",
+  upcoming: "bg-muted text-muted-foreground",
+};
 
 interface Trip {
   id: string;
@@ -54,7 +76,7 @@ export default function POSPage() {
   const [passengerDocumentType, setPassengerDocumentType] = useState<"cedula" | "pasaporte">("cedula");
   const [isProcessing, setIsProcessing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [step, setStep] = useState<"trip" | "seat" | "passenger" | "confirm">("trip");
+  const [step, setStep] = useState<Step>("trip");
 
   useEffect(() => {
     fetchUpcomingTrips();
@@ -252,26 +274,30 @@ export default function POSPage() {
 
         {/* Step Indicator */}
         <div className="mb-6 flex items-center justify-center gap-4">
-          <div className={`flex items-center gap-2 ${step === "trip" ? "text-primary" : step !== "trip" ? "text-success" : "text-muted-foreground"}`}>
-            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg ${step === "trip" ? "bg-primary text-primary-foreground" : step !== "trip" ? "bg-success text-success-foreground" : "bg-muted text-muted-foreground"}`}>
-              {step !== "trip" ? "✓" : "1"}
-            </div>
-            <span className="font-semibold text-lg">Viaje</span>
-          </div>
-          <div className="w-16 h-1 bg-border" />
-          <div className={`flex items-center gap-2 ${step === "seat" ? "text-primary" : step === "passenger" || step === "confirm" ? "text-success" : "text-muted-foreground"}`}>
-            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg ${step === "seat" ? "bg-primary text-primary-foreground" : step === "passenger" || step === "confirm" ? "bg-success text-success-foreground" : "bg-muted text-muted-foreground"}`}>
-              {step === "passenger" || step === "confirm" ? "✓" : "2"}
-            </div>
-            <span className="font-semibold text-lg">Asiento</span>
-          </div>
-          <div className="w-16 h-1 bg-border" />
-          <div className={`flex items-center gap-2 ${step === "passenger" ? "text-primary" : step === "confirm" ? "text-success" : "text-muted-foreground"}`}>
-            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg ${step === "passenger" ? "bg-primary text-primary-foreground" : step === "confirm" ? "bg-success text-success-foreground" : "bg-muted text-muted-foreground"}`}>
-              {step === "confirm" ? "✓" : "3"}
-            </div>
-            <span className="font-semibold text-lg">Pasajero</span>
-          </div>
+          {STEP_META.map((meta, index) => {
+            const currentIndex = STEP_SEQUENCE.indexOf(step);
+            const targetIndex = STEP_SEQUENCE.indexOf(meta.id);
+            const status: StepStatus =
+              currentIndex === targetIndex
+                ? "current"
+                : currentIndex > targetIndex
+                ? "completed"
+                : "upcoming";
+
+            return (
+              <Fragment key={meta.id}>
+                <div className={`flex items-center gap-2 ${STATUS_TEXT_CLASS[status]}`}>
+                  <div
+                    className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg ${STATUS_CIRCLE_CLASS[status]}`}
+                  >
+                    {status === "completed" ? "✓" : meta.number}
+                  </div>
+                  <span className="font-semibold text-lg">{meta.label}</span>
+                </div>
+                {index < STEP_META.length - 1 && <div className="w-16 h-1 bg-border" />}
+              </Fragment>
+            );
+          })}
         </div>
 
         {/* Main Content */}
