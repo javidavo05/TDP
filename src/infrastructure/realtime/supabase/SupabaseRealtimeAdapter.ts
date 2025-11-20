@@ -14,14 +14,14 @@ export class SupabaseRealtimeAdapter implements IRealtimeProvider {
   ): RealtimeSubscription {
     const channelInstance = this.supabase.channel(channel);
 
-    channelInstance.on(
+    channelInstance.on<RealtimePostgresChangesPayload<T>>(
       "postgres_changes" as any,
       {
         event: ((event?.toUpperCase() as PostgresChangeEvent) || "*") as PostgresChangeEvent,
         schema: "public",
         table: channel,
       } as any,
-      (payload: RealtimePostgresChangesPayload<any>) => {
+      (payload) => {
         callback(payload.new as T);
       }
     );
