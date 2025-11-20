@@ -3,7 +3,7 @@ export interface RealtimeSubscription {
 }
 
 export interface IRealtimeProvider {
-  subscribe<T>(
+  subscribe<T extends Record<string, any>>(
     channel: string,
     event: string,
     callback: (payload: T) => void
