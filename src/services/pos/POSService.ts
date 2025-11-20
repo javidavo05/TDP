@@ -44,17 +44,18 @@ export class POSService {
 
     // Process payment
     let payment: Payment;
+    const itbms = calculateITBMS(data.amount);
     
     if (data.paymentMethod === "cash") {
       // Cash payment - immediate confirmation
-      payment = await this.paymentRepository.create({
+      payment = Payment.create({
         ticketId: ticket.id,
+        paymentMethod: "cash",
         amount: data.amount,
-        itbms: calculateITBMS(data.amount),
-        method: "cash" as PaymentMethod,
-        status: "completed" as PaymentStatus,
-        terminalId: data.terminalId,
+        itbms,
       });
+      payment.markAsCompleted("cash", { terminalId: data.terminalId });
+      payment = await this.paymentRepository.create(payment);
 
       // Update ticket to paid
       await this.ticketRepository.update(ticket.id, {
@@ -70,24 +71,32 @@ export class POSService {
         metadata: {
           passengerName: data.passengerName,
           tripId: data.tripId,
+          terminalId: data.terminalId,
         },
       });
 
-      payment = await this.paymentRepository.create({
+      payment = Payment.create({
         ticketId: ticket.id,
+        paymentMethod: data.paymentMethod,
         amount: data.amount,
-        itbms: calculateITBMS(data.amount),
-        method: data.paymentMethod,
-        status: paymentResult.status as PaymentStatus,
-        externalId: paymentResult.transactionId,
-        terminalId: data.terminalId,
+        itbms,
       });
 
       if (paymentResult.status === "completed") {
+        payment.markAsCompleted(paymentResult.transactionId, {
+          ...paymentResult,
+          terminalId: data.terminalId,
+        });
         await this.ticketRepository.update(ticket.id, {
           status: "paid" as TicketStatus,
         });
+      } else if (paymentResult.status === "processing") {
+        payment.markAsProcessing();
+      } else {
+        payment.markAsFailed(paymentResult.error || "Payment failed");
       }
+
+      payment = await this.paymentRepository.create(payment);
     }
 
     return { ticket, payment };
@@ -111,13 +120,13 @@ export class POSService {
     );
 
     const payments = await Promise.all(
-      tickets.map((t) => this.paymentRepository.findByTicketId(t.id))
+      tickets.map((t) => this.paymentRepository.findByTicket(t.id))
     );
 
     const totalSales = payments.reduce((sum, p) => sum + (p?.amount || 0), 0);
     const byPaymentMethod = payments.reduce((acc, p) => {
       if (p) {
-        acc[p.method] = (acc[p.method] || 0) + p.amount;
+        acc[p.paymentMethod] = (acc[p.paymentMethod] || 0) + p.amount;
       }
       return acc;
     }, {} as Record<PaymentMethod, number>);
