@@ -7,7 +7,7 @@ type PostgresChangeEvent = "INSERT" | "UPDATE" | "DELETE" | "*";
 export class SupabaseRealtimeAdapter implements IRealtimeProvider {
   private supabase = createClient();
 
-  subscribe<T>(
+  subscribe<T extends Record<string, any>>(
     channel: string,
     event: string = "*",
     callback: (payload: T) => void
