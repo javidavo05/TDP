@@ -1,9 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
 
+export type SettingCategory = "payment" | "email" | "general" | "fiscal" | "printer" | string;
+
 export interface SystemSetting {
   key: string;
   value: any;
-  category: "payment" | "email" | "general";
+  category: SettingCategory;
   description?: string;
   updatedAt: Date;
   updatedBy?: string;
@@ -12,8 +14,8 @@ export interface SystemSetting {
 export interface ISettingsRepository {
   get(key: string): Promise<SystemSetting | null>;
   getAll(): Promise<SystemSetting[]>;
-  getByCategory(category: "payment" | "email" | "general"): Promise<SystemSetting[]>;
-  set(key: string, value: any, category: "payment" | "email" | "general", description?: string): Promise<SystemSetting>;
+  getByCategory(category: SettingCategory): Promise<SystemSetting[]>;
+  set(key: string, value: any, category: SettingCategory, description?: string): Promise<SystemSetting>;
   delete(key: string): Promise<void>;
 }
 
@@ -48,7 +50,7 @@ export class SettingsRepository implements ISettingsRepository {
     return data.map((item) => this.mapToSetting(item));
   }
 
-  async getByCategory(category: "payment" | "email" | "general"): Promise<SystemSetting[]> {
+  async getByCategory(category: SettingCategory): Promise<SystemSetting[]> {
     const supabase = await createClient();
     const { data, error } = await supabase
       .from("system_settings")
@@ -63,12 +65,11 @@ export class SettingsRepository implements ISettingsRepository {
     return data.map((item) => this.mapToSetting(item));
   }
 
-  async set(
-    key: string,
-    value: any,
-    category: "payment" | "email" | "general",
-    description?: string
-  ): Promise<SystemSetting> {
+  async getSettingsByCategory(category: SettingCategory): Promise<SystemSetting[]> {
+    return this.getByCategory(category);
+  }
+
+  async set(key: string, value: any, category: SettingCategory, description?: string): Promise<SystemSetting> {
     const supabase = await createClient();
     
     // Get current user for updated_by
