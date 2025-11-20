@@ -10,6 +10,30 @@ interface QRScannerProps {
   qrbox?: { width: number; height: number };
 }
 
+/**
+ * Helper function to stop all active video tracks
+ * This ensures the camera is completely turned off
+ */
+function stopAllVideoTracks() {
+  try {
+    // Stop any tracks from active video elements
+    const videoElements = document.querySelectorAll("video");
+    videoElements.forEach((video) => {
+      if (video.srcObject) {
+        const stream = video.srcObject as MediaStream;
+        stream.getTracks().forEach((track) => {
+          if (track.kind === "video" && track.readyState === "live") {
+            track.stop();
+          }
+        });
+        video.srcObject = null;
+      }
+    });
+  } catch (err) {
+    // Ignore errors during cleanup
+  }
+}
+
 export function QRScanner({
   onScanSuccess,
   onScanError,
@@ -38,12 +62,14 @@ export function QRScanner({
             try {
               // Stop scanner before calling callback to avoid DOM errors
               await scanner.stop();
+              stopAllVideoTracks();
               setScanning(false);
               // Call callback after stopping
               onScanSuccess(decodedText);
             } catch (stopError) {
               // If stop fails, still call callback and try to clean up
               console.warn("Error stopping scanner:", stopError);
+              stopAllVideoTracks();
               setScanning(false);
               onScanSuccess(decodedText);
             }
@@ -68,23 +94,45 @@ export function QRScanner({
 
     startScanning();
 
-    return () => {
+    // Function to stop scanner and camera
+    const stopScanner = async () => {
       if (scannerRef.current) {
-        const currentScanner = scannerRef.current;
-        // Use a timeout to ensure DOM is stable
-        setTimeout(async () => {
-          try {
-            if (currentScanner && containerRef.current) {
-              await currentScanner.stop();
-            }
-          } catch (err) {
-            // Ignore cleanup errors
-            console.warn("Error during scanner cleanup:", err);
-          } finally {
-            scannerRef.current = null;
-          }
-        }, 100);
+        try {
+          await scannerRef.current.stop();
+        } catch (err) {
+          // Ignore errors - scanner might already be stopped
+        }
+        scannerRef.current = null;
       }
+      // Always stop video tracks to ensure camera is off
+      stopAllVideoTracks();
+      setScanning(false);
+    };
+
+    // Handle page unload (closing tab/window)
+    const handleBeforeUnload = () => {
+      stopScanner();
+    };
+
+    // Handle page visibility change (tab hidden/visible)
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        stopScanner();
+      }
+    };
+
+    // Add event listeners
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    // Cleanup function
+    return () => {
+      // Remove event listeners
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+
+      // Stop scanner immediately
+      stopScanner();
     };
   }, [fps, qrbox, onScanSuccess, onScanError]);
 
