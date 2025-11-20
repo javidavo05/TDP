@@ -1,28 +1,47 @@
-import { IRealtimeProvider, RealtimeSubscription } from "@/domain/interfaces";
+import {
+  IRealtimeProvider,
+  RealtimeSubscribeParams,
+  RealtimeSubscription,
+} from "@/domain/interfaces";
 import { createClient } from "@/lib/supabase/client";
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
+import type { RealtimePostgresChangesFilter } from "@supabase/realtime-js";
 
-type PostgresChangeEvent = "INSERT" | "UPDATE" | "DELETE" | "*";
+const DEFAULT_SCHEMA = "public";
+const DEFAULT_EVENT = "*";
 
 export class SupabaseRealtimeAdapter implements IRealtimeProvider {
   private supabase = createClient();
 
   subscribe<T extends Record<string, any>>(
-    channel: string,
-    event: string = "*",
-    callback: (payload: T) => void
+    params: RealtimeSubscribeParams,
+    callback: (payload: RealtimePostgresChangesPayload<T>) => void
   ): RealtimeSubscription {
-    const channelInstance = this.supabase.channel(channel);
+    const {
+      channel,
+      schema = DEFAULT_SCHEMA,
+      table,
+      event = DEFAULT_EVENT,
+      filter,
+    } = params;
 
-    channelInstance.on<RealtimePostgresChangesPayload<T>>(
-      "postgres_changes" as any,
-      {
-        event: ((event?.toUpperCase() as PostgresChangeEvent) || "*") as PostgresChangeEvent,
-        schema: "public",
-        table: channel,
-      } as any,
+    const channelName = channel ?? this.buildChannelName(schema, table, event, filter);
+    const channelInstance = this.supabase.channel(channelName);
+
+    const filterConfig: RealtimePostgresChangesFilter<any> = {
+      event: event.toUpperCase(),
+      schema,
+      table,
+      ...(filter ? { filter } : {}),
+    };
+
+    channelInstance.on(
+      "postgres_changes",
+      filterConfig,
       (payload) => {
-        callback(payload.new as T);
+        if (this.isPostgresPayload<T>(payload)) {
+          callback(payload);
+        }
       }
     );
 
@@ -45,8 +64,23 @@ export class SupabaseRealtimeAdapter implements IRealtimeProvider {
   }
 
   isConnected(): boolean {
-    // Supabase realtime connection status
-    return true; // Simplified - in production, check actual connection status
+    return true;
+  }
+
+  private buildChannelName(schema: string, table: string, event: string, filter?: string) {
+    const filterSuffix = filter ? `:${filter}` : "";
+    return `postgres:${schema}:${table}:${event}${filterSuffix}`;
+  }
+
+  private isPostgresPayload<T extends Record<string, any>>(
+    payload: unknown
+  ): payload is RealtimePostgresChangesPayload<T> {
+    return Boolean(
+      payload &&
+        typeof payload === "object" &&
+        "eventType" in payload &&
+        ("new" in payload || "old" in payload)
+    );
   }
 }
 
