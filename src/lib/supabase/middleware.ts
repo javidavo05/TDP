@@ -12,7 +12,7 @@ export async function updateSession(request: NextRequest) {
     {
       cookies: {
         get(name) {
-          return request.cookies.get(name);
+          return request.cookies.get(name)?.value;
         },
         set(name, value, options) {
           request.cookies.set(name, value);
