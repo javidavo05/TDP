@@ -3,6 +3,8 @@ import { AnalyticsService } from "@/services/analytics/AnalyticsService";
 import { AnalyticsRepository } from "@/infrastructure/db/supabase/AnalyticsRepository";
 import { createClient } from "@/lib/supabase/server";
 
+export const dynamic = 'force-dynamic';
+
 const analyticsRepository = new AnalyticsRepository();
 const analyticsService = new AnalyticsService(analyticsRepository);
 

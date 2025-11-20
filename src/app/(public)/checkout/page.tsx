@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { PAYMENT_METHODS } from "@/lib/constants";
 import { formatCurrency, calculateITBMS, ITBMS_RATE } from "@/lib/utils";
 
-export default function CheckoutPage() {
+function CheckoutContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [trip, setTrip] = useState<any>(null);
@@ -239,6 +239,18 @@ export default function CheckoutPage() {
         </form>
       </div>
     </div>
+  );
+}
+
+export default function CheckoutPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-lg">Cargando...</div>
+      </div>
+    }>
+      <CheckoutContent />
+    </Suspense>
   );
 }
 

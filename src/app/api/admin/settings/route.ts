@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { SettingsService } from "@/services/admin/SettingsService";
 import { SettingsRepository } from "@/infrastructure/db/supabase/SettingsRepository";
 
+export const dynamic = 'force-dynamic';
+
 const settingsRepository = new SettingsRepository();
 const settingsService = new SettingsService(settingsRepository);
 

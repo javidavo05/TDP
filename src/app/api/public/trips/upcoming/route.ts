@@ -3,6 +3,8 @@ import { TripRepository } from "@/infrastructure/db/supabase/TripRepository";
 import { TicketingService } from "@/services/public/ticketing/TicketingService";
 import { TicketRepository } from "@/infrastructure/db/supabase/TicketRepository";
 
+export const dynamic = 'force-dynamic';
+
 const tripRepository = new TripRepository();
 const ticketRepository = new TicketRepository();
 const ticketingService = new TicketingService(ticketRepository, tripRepository);

@@ -4,6 +4,8 @@ import { TicketingService } from "@/services/public/ticketing/TicketingService";
 import { TicketRepository } from "@/infrastructure/db/supabase/TicketRepository";
 import { TripSearchFilters } from "@/domain/types";
 
+export const dynamic = 'force-dynamic';
+
 const tripRepository = new TripRepository();
 const ticketRepository = new TicketRepository();
 const ticketingService = new TicketingService(ticketRepository, tripRepository);

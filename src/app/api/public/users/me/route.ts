@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { UserRepository } from "@/infrastructure/db/supabase/UserRepository";
 import { User } from "@/domain/entities";
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();

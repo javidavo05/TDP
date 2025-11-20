@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { UserRepository } from "@/infrastructure/db/supabase/UserRepository";
 
+export const dynamic = 'force-dynamic';
+
 const userRepository = new UserRepository();
 
 export async function GET(request: NextRequest) {
