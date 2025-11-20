@@ -121,7 +121,7 @@ export class TicketingService {
     }
 
     ticket.markAsPaid();
-    return this.ticketRepository.update(ticket);
+    return this.ticketRepository.update(ticket.id, { status: ticket.status });
   }
 
   async getUserTickets(userId: string, params?: PaginationParams): Promise<PaginatedResponse<Ticket>> {
@@ -170,7 +170,7 @@ export class TicketingService {
     }
 
     ticket.cancel();
-    return this.ticketRepository.update(ticket);
+    return this.ticketRepository.update(ticket.id, { status: ticket.status });
   }
 
   async generateShareToken(ticketId: string, userId: string): Promise<string> {
@@ -184,7 +184,7 @@ export class TicketingService {
     }
 
     const token = ticket.generateShareToken();
-    await this.ticketRepository.update(ticket);
+    await this.ticketRepository.update(ticket.id, { qrToken: ticket.qrToken });
     return token;
   }
 

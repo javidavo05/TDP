@@ -143,6 +143,7 @@ export class TicketRepository implements ITicketRepository {
     if (ticket.passengerName !== undefined) updateData.passenger_name = ticket.passengerName;
     if (ticket.passengerPhone !== undefined) updateData.passenger_phone = ticket.passengerPhone;
     if (ticket.passengerEmail !== undefined) updateData.passenger_email = ticket.passengerEmail;
+    if (ticket.qrToken !== undefined) updateData.qr_token = ticket.qrToken;
 
     const { data, error } = await supabase
       .from("tickets")
