@@ -2,6 +2,13 @@ export const TERMINALS = ["David", "Santiago", "Panamá"] as const;
 
 export const ITBMS_RATE = 0.07;
 
+export function calculateITBMS(
+  amount: number,
+  rate: number = ITBMS_RATE
+): number {
+  return Math.round(amount * rate * 100) / 100;
+}
+
 export const CURRENCY = "USD";
 
 export const SEAT_LOCK_TIMEOUT = 5 * 60 * 1000; // 5 minutes in milliseconds

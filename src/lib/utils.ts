@@ -1,6 +1,8 @@
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 
+export { ITBMS_RATE, calculateITBMS } from "./constants";
+
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
@@ -10,10 +12,6 @@ export function formatCurrency(amount: number, currency: string = "USD"): string
     style: "currency",
     currency,
   }).format(amount);
-}
-
-export function calculateITBMS(amount: number, rate: number = 0.07): number {
-  return Math.round(amount * rate * 100) / 100;
 }
 
 export function formatDate(date: Date | string): string {
