@@ -1,15 +1,5 @@
-import { IGPSRepository, ITripRepository } from "@/domain/repositories";
+import { IGPSRepository, ITripRepository, GPSLog } from "@/domain/repositories";
 import { Trip } from "@/domain/entities";
-
-export interface GPSLog {
-  tripId: string;
-  busId: string;
-  latitude: number;
-  longitude: number;
-  speed?: number;
-  heading?: number;
-  timestamp: Date;
-}
 
 export class GPSService {
   constructor(
@@ -23,8 +13,8 @@ export class GPSService {
       busId: data.busId,
       latitude: data.latitude,
       longitude: data.longitude,
-      speed: data.speed || null,
-      heading: data.heading || null,
+      speed: data.speed ?? null,
+      heading: data.heading ?? null,
       timestamp: data.timestamp,
     });
 
@@ -60,7 +50,7 @@ export class GPSService {
     );
 
     // Estimate speed (km/h) - use current speed or average
-    const speed = currentLocation.speed ? currentLocation.speed * 3.6 : 60; // Default 60 km/h
+    const speed = currentLocation.speed != null ? currentLocation.speed * 3.6 : 60; // Default 60 km/h
 
     // Calculate ETA in minutes
     const etaMinutes = (distance / speed) * 60;
