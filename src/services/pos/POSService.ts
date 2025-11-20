@@ -1,6 +1,6 @@
 import { Ticket, Payment } from "@/domain/entities";
 import { ITicketRepository, IPaymentRepository } from "@/domain/repositories";
-import { PaymentMethod, TicketStatus, PaymentStatus } from "@/domain/types";
+import { PaymentMethod, TicketStatus } from "@/domain/types";
 import { PaymentProviderFactory } from "@/infrastructure/payments/PaymentProviderFactory";
 import { calculateITBMS, ITBMS_RATE } from "@/lib/constants";
 
@@ -45,7 +45,7 @@ export class POSService {
     // Process payment
     let payment: Payment;
     const itbms = calculateITBMS(data.amount);
-    
+
     if (data.paymentMethod === "cash") {
       // Cash payment - immediate confirmation
       payment = Payment.create({
@@ -54,7 +54,7 @@ export class POSService {
         amount: data.amount,
         itbms,
       });
-      payment.markAsCompleted("cash", { terminalId: data.terminalId });
+      payment.markAsCompleted("pos-cash", { terminalId: data.terminalId });
       payment = await this.paymentRepository.create(payment);
 
       // Update ticket to paid
@@ -64,16 +64,6 @@ export class POSService {
     } else {
       // Online payment - use payment provider
       const provider = PaymentProviderFactory.getProvider(data.paymentMethod);
-      const paymentResult = await provider.processPayment({
-        amount: data.amount,
-        currency: "USD",
-        ticketId: ticket.id,
-        metadata: {
-          passengerName: data.passengerName,
-          tripId: data.tripId,
-          terminalId: data.terminalId,
-        },
-      });
 
       payment = Payment.create({
         ticketId: ticket.id,
@@ -81,22 +71,36 @@ export class POSService {
         amount: data.amount,
         itbms,
       });
+      payment.markAsProcessing();
+      await this.paymentRepository.create(payment);
 
-      if (paymentResult.status === "completed") {
-        payment.markAsCompleted(paymentResult.transactionId, {
-          ...paymentResult,
+      const response = await provider.initiatePayment({
+        amount: data.amount,
+        itbms,
+        description: `POS Ticket ${ticket.qrCode}`,
+        customerInfo: {
+          name: data.passengerName,
+          email: data.passengerEmail,
+          phone: data.passengerPhone,
+        },
+        metadata: {
+          ticketId: ticket.id,
+          tripId: data.tripId,
+          seatId: data.seatId,
           terminalId: data.terminalId,
-        });
+        },
+      });
+
+      if (response.status === "completed") {
+        payment.markAsCompleted(response.transactionId, response.metadata);
         await this.ticketRepository.update(ticket.id, {
           status: "paid" as TicketStatus,
         });
-      } else if (paymentResult.status === "processing") {
-        payment.markAsProcessing();
-      } else {
-        payment.markAsFailed(paymentResult.error || "Payment failed");
+      } else if (response.status === "failed") {
+        payment.markAsFailed(response.error);
       }
 
-      payment = await this.paymentRepository.create(payment);
+      payment = await this.paymentRepository.update(payment);
     }
 
     return { ticket, payment };
