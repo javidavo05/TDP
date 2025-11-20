@@ -42,7 +42,13 @@ export async function POST(
     }
 
     ticket.markAsBoarded();
-    const updatedTicket = await ticketRepository.update(ticket);
+    const updatedTicket = await ticketRepository.update(ticket.id, {
+      status: ticket.status,
+      boardedAt: ticket.boardedAt,
+      passengerName: ticket.passengerName,
+      passengerPhone: ticket.passengerPhone,
+      passengerEmail: ticket.passengerEmail,
+    });
 
     // Create trip manifest entry if passenger_id exists
     if (updatedTicket.passengerId) {
