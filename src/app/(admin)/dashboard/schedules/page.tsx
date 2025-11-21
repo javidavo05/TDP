@@ -50,6 +50,7 @@ export default function SchedulesPage() {
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [buses, setBuses] = useState<Bus[]>([]);
   const [assignments, setAssignments] = useState<ScheduleAssignment[]>([]);
+  const [trips, setTrips] = useState<Array<{ scheduleId: string; hour: number; tripId: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [draggedBus, setDraggedBus] = useState<Bus | null>(null);
   const [dragOverScheduleId, setDragOverScheduleId] = useState<string | null>(null);
@@ -71,6 +72,13 @@ export default function SchedulesPage() {
       fetchAssignments();
     }
   }, [selectedRoute, selectedDate]);
+
+  // Fetch trips after schedules are loaded
+  useEffect(() => {
+    if (selectedRoute && schedules.length > 0) {
+      fetchTrips();
+    }
+  }, [selectedRoute, selectedDate, schedules]);
 
   const fetchRoutes = async () => {
     try {
@@ -133,6 +141,35 @@ export default function SchedulesPage() {
       }
     } catch (error) {
       console.error("Error fetching assignments:", error);
+    }
+  };
+
+  const fetchTrips = async () => {
+    if (!selectedRoute) return;
+    if (!selectedDate || isNaN(selectedDate.getTime())) return;
+    const dateStr = format(selectedDate, "yyyy-MM-dd");
+    try {
+      // Get trips for the selected date and route
+      const response = await fetch(`/api/admin/trips?date=${dateStr}&routeId=${selectedRoute}`);
+      const data = await response.json();
+      if (response.ok) {
+        // Map trips to schedules by matching hour and route
+        const tripsData = data.trips || [];
+        const tripsBySchedule = tripsData.map((trip: any) => {
+          const departureTime = new Date(trip.departureTime);
+          const hour = departureTime.getUTCHours();
+          // Find matching schedule - use current schedules state
+          const schedule = schedules.find(s => s.hour === hour && s.routeId === selectedRoute);
+          return {
+            scheduleId: schedule?.id || "",
+            hour,
+            tripId: trip.id,
+          };
+        }).filter((t: any) => t.scheduleId);
+        setTrips(tripsBySchedule);
+      }
+    } catch (error) {
+      console.error("Error fetching trips:", error);
     }
   };
 
@@ -379,8 +416,9 @@ export default function SchedulesPage() {
           message += `\n${skipped} horarios fueron omitidos (sin bus asignado)`;
         }
         alert(message);
-        // Refresh assignments to show updated data
+        // Refresh assignments and trips to show updated data
         await fetchAssignments();
+        await fetchTrips();
       } else {
         alert(data.error || "Error al generar trips");
       }
@@ -396,6 +434,19 @@ export default function SchedulesPage() {
 
   const getBusById = (busId: string): Bus | undefined => {
     return buses.find((b) => b.id === busId);
+  };
+
+  // Get trip status for a schedule
+  const getScheduleTripStatus = (scheduleId: string | null, hour: number): "no-bus" | "bus-no-trip" | "trip-generated" => {
+    if (!scheduleId) return "no-bus";
+    
+    const scheduleAssignments = getAssignmentsForSchedule(scheduleId);
+    if (scheduleAssignments.length === 0) return "no-bus";
+    
+    const hasTrip = trips.some(t => t.scheduleId === scheduleId && t.hour === hour);
+    if (hasTrip) return "trip-generated";
+    
+    return "bus-no-trip";
   };
 
   // Generate all 24 hours
@@ -486,6 +537,9 @@ export default function SchedulesPage() {
                   : editingHour === hour;
                 const routeSelected = schedule ? true : !!selectedRouteForHour[hour];
                 const canDrop = isEditing && draggedBus && routeSelected;
+                
+                // Get trip status for visual feedback
+                const tripStatus = getScheduleTripStatus(schedule?.id || null, hour);
 
                 return (
                   <div
@@ -516,7 +570,11 @@ export default function SchedulesPage() {
                             : "border-primary border-2 bg-primary/10"
                           : dragOverScheduleId === schedule.id
                             ? "border-primary/50 bg-primary/5"
-                            : "border-primary/50 bg-primary/5"
+                            : tripStatus === "trip-generated"
+                              ? "border-success border-2 bg-success/10"
+                              : tripStatus === "bus-no-trip"
+                                ? "border-warning border-2 bg-warning/10"
+                                : "border-primary/50 bg-primary/5"
                         : "border-border bg-muted/30"
                     } ${draggedBus && !canDrop ? "opacity-50" : ""}`}
                   >
@@ -525,6 +583,18 @@ export default function SchedulesPage() {
                         <span className="font-semibold">
                           {hour.toString().padStart(2, "0")}:00
                         </span>
+                        {/* Trip status indicator */}
+                        {schedule && tripStatus === "trip-generated" && (
+                          <span className="px-2 py-0.5 bg-success text-success-foreground rounded text-xs font-medium flex items-center gap-1">
+                            <span>✓</span>
+                            <span>Trip Generado</span>
+                          </span>
+                        )}
+                        {schedule && tripStatus === "bus-no-trip" && (
+                          <span className="px-2 py-0.5 bg-warning text-warning-foreground rounded text-xs font-medium">
+                            Bus sin Trip
+                          </span>
+                        )}
                         {schedule ? (
                           <>
                             <span

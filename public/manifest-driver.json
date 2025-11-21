@@ -1,0 +1,58 @@
+{
+  "name": "TDP Chofer",
+  "short_name": "TDP Chofer",
+  "description": "Aplicación móvil para choferes del sistema TDP",
+  "start_url": "/mobile/driver",
+  "scope": "/mobile/driver",
+  "display": "standalone",
+  "background_color": "#1e40af",
+  "theme_color": "#3b82f6",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icon-driver-16x16.png",
+      "sizes": "16x16",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-driver-32x32.png",
+      "sizes": "32x32",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-driver-96x96.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-driver-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-driver-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "productivity", "utilities"],
+  "shortcuts": [
+    {
+      "name": "Inicio",
+      "short_name": "Inicio",
+      "description": "Ir al inicio",
+      "url": "/mobile/driver",
+      "icons": [{ "src": "/icon-driver-192x192.png", "sizes": "192x192" }]
+    }
+  ],
+  "permissions": [
+    "geolocation"
+  ],
+  "prefer_related_applications": false
+}
+

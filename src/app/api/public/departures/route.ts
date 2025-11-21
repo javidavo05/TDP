@@ -29,82 +29,76 @@ export async function GET(request: NextRequest) {
     }
 
     const now = new Date();
-    const today = format(now, "yyyy-MM-dd");
-    const fourHoursLater = new Date(now.getTime() + 4 * 60 * 60 * 1000);
-    const endDate = format(fourHoursLater, "yyyy-MM-dd");
+    const tenHoursLater = new Date(now.getTime() + 10 * 60 * 60 * 1000);
 
-    // Get schedule assignments for today and next 4 hours
-    const { data: assignments, error: assignmentsError } = await supabase
-      .from("schedule_assignments")
+    // Get trips for the next 10 hours
+    const { data: tripsData, error: tripsError } = await supabase
+      .from("trips")
       .select(`
         id,
-        date,
-        schedules (
+        departure_time,
+        status,
+        available_seats,
+        total_seats,
+        price,
+        routes (
           id,
-          hour,
-          is_express,
-          routes (
-            id,
-            origin,
-            destination
-          )
+          origin,
+          destination,
+          name
         ),
         buses (
           id,
           plate_number,
-          unit_number
+          unit_number,
+          bus_class
         )
       `)
-      .gte("date", today)
-      .lte("date", endDate)
-      .eq("date", today); // Only today for now
+      .gte("departure_time", now.toISOString())
+      .lte("departure_time", tenHoursLater.toISOString())
+      .in("status", ["scheduled", "boarding"])
+      .order("departure_time", { ascending: true });
 
-    if (assignmentsError) {
-      throw new Error(`Failed to fetch assignments: ${assignmentsError.message}`);
+    if (tripsError) {
+      throw new Error(`Failed to fetch trips: ${tripsError.message}`);
     }
 
-    // Transform data
-    const departures = (assignments || [])
-      .filter((a: any) => a.schedules && a.buses)
-      .map((assignment: any) => {
-        const schedule = assignment.schedules;
-        const bus = assignment.buses;
-        const route = schedule.routes;
+    // Transform trips to departures format
+    const departures = (tripsData || [])
+      .filter((trip: any) => trip.routes && trip.buses)
+      .map((trip: any) => {
+        const departureTime = new Date(trip.departure_time);
+        const minutesUntil = (departureTime.getTime() - now.getTime()) / (1000 * 60);
 
-        // Determine status based on current time
-        const depTime = new Date(assignment.date);
-        depTime.setHours(schedule.hour, 0, 0, 0);
-        const now = new Date();
-        const minutesUntil = (depTime.getTime() - now.getTime()) / (1000 * 60);
-
-        let status: "scheduled" | "boarding" | "departed" | "delayed" = "scheduled";
+        let status: "scheduled" | "boarding" | "departed" | "delayed" = trip.status as "scheduled" | "boarding";
         if (minutesUntil < -30) {
           status = "departed";
-        } else if (minutesUntil < 0 && minutesUntil >= -30) {
-          status = "departed";
-        } else if (minutesUntil >= 0 && minutesUntil <= 30) {
+        } else if (minutesUntil >= 0 && minutesUntil <= 30 && trip.status === "scheduled") {
           status = "boarding";
         }
 
         return {
-          id: assignment.id,
-          hour: schedule.hour,
-          isExpress: schedule.is_express,
-          busPlateNumber: bus.plate_number,
-          busUnitNumber: bus.unit_number,
-          routeOrigin: route?.origin || "N/A",
-          routeDestination: route?.destination || "N/A",
+          id: trip.id,
+          hour: departureTime.getHours(),
+          minute: departureTime.getMinutes(),
+          departureTime: trip.departure_time,
+          isExpress: false, // Can be added to trips table if needed
+          busPlateNumber: trip.buses.plate_number,
+          busUnitNumber: trip.buses.unit_number,
+          busClass: trip.buses.bus_class || "economico",
+          routeOrigin: trip.routes?.origin || "N/A",
+          routeDestination: trip.routes?.destination || "N/A",
+          routeName: trip.routes?.name || "",
           status,
+          availableSeats: trip.available_seats,
+          totalSeats: trip.total_seats,
+          price: trip.price,
         };
       })
-      .filter((dep: any) => {
-        // Only show departures in the next 4 hours
-        const depTime = new Date();
-        depTime.setHours(dep.hour, 0, 0, 0);
-        const hoursUntil = (depTime.getTime() - now.getTime()) / (1000 * 60 * 60);
-        return hoursUntil >= 0 && hoursUntil <= 4;
-      })
-      .sort((a: any, b: any) => a.hour - b.hour);
+      .sort((a: any, b: any) => {
+        // Sort by departure time
+        return new Date(a.departureTime).getTime() - new Date(b.departureTime).getTime();
+      });
 
     return NextResponse.json({ departures });
   } catch (error) {

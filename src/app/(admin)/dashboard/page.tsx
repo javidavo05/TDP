@@ -6,6 +6,7 @@ import { DashboardTabs, type TabId } from "@/components/admin/DashboardTabs";
 import { FinancialDashboard } from "@/components/admin/FinancialDashboard";
 import { SalesDashboard } from "@/components/admin/SalesDashboard";
 import { SettingsPanel } from "@/components/admin/SettingsPanel";
+import { PWAInstaller } from "@/components/admin/PWAInstaller";
 import Link from "next/link";
 import {
   LayoutDashboard,
@@ -477,6 +478,11 @@ export default function AdminDashboardPage() {
                       </div>
                     );
                   })}
+                </div>
+
+                {/* PWA Installer Section */}
+                <div className="mt-8">
+                  <PWAInstaller />
                 </div>
               </div>
             ) : (

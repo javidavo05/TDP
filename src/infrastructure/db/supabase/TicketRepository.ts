@@ -125,6 +125,9 @@ export class TicketRepository implements ITicketRepository {
       passenger_id: ticket.passengerId || null,
       passenger_document_id: ticket.passengerDocumentId || null,
       pos_session_id: (ticket as any).posSessionId || null,
+      discount_amount: (ticket as any).discountAmount?.toString() || "0",
+      discount_code: (ticket as any).discountCode || null,
+      is_senior: (ticket as any).isSenior || false,
     };
 
     const { data, error } = await supabase

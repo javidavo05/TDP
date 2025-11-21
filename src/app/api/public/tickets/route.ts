@@ -41,6 +41,11 @@ export async function POST(request: NextRequest) {
       boardingStopId,
       passengerDocumentId,
       passengerDocumentType,
+      discountAmount,
+      couponDiscount,
+      seniorDiscount,
+      discountCode,
+      isSenior,
     } = body;
 
     // Get user if authenticated
@@ -61,6 +66,11 @@ export async function POST(request: NextRequest) {
       boardingStopId,
       passengerDocumentId,
       passengerDocumentType,
+      discountAmount: discountAmount || 0,
+      couponDiscount: couponDiscount || 0,
+      seniorDiscount: seniorDiscount || 0,
+      discountCode,
+      isSenior: isSenior || false,
     });
 
     return NextResponse.json(

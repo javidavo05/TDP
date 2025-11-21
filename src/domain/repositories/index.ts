@@ -13,4 +13,5 @@ export * from "./IPOSTerminalRepository";
 export * from "./IPOSCashSessionRepository";
 export * from "./IPOSTransactionRepository";
 export * from "./ICashCountRepository";
+export * from "./IDiscountRepository";
 

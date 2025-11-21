@@ -3,6 +3,7 @@ import { ITicketRepository, ITripRepository, IPassengerRepository } from "@/doma
 import { TripSearchFilters, TicketStatus, PaginationParams, PaginatedResponse } from "@/domain/types";
 import { calculateITBMS, ITBMS_RATE } from "@/lib/constants";
 import { PassengerService } from "@/services/admin/PassengerService";
+import { createClient } from "@/lib/supabase/server";
 
 export class TicketingService {
   private passengerService: PassengerService | null = null;
@@ -44,6 +45,11 @@ export class TicketingService {
     boardingStopId?: string;
     passengerDocumentId?: string;
     passengerDocumentType?: "cedula" | "pasaporte";
+    discountAmount?: number;
+    couponDiscount?: number;
+    seniorDiscount?: number;
+    discountCode?: string;
+    isSenior?: boolean;
   }): Promise<Ticket> {
     // Verify trip exists and is available
     const trip = await this.tripRepository.findById(data.tripId);
@@ -79,7 +85,7 @@ export class TicketingService {
       }
     }
 
-    // Calculate ITBMS
+    // Calculate ITBMS (after discounts)
     const itbms = calculateITBMS(data.price, ITBMS_RATE);
 
     // Create ticket
@@ -103,8 +109,52 @@ export class TicketingService {
       throw new Error("No available seats");
     }
 
+    // Add discount fields to ticket
+    (ticket as any).discountAmount = data.discountAmount || 0;
+    (ticket as any).discountCode = data.discountCode || null;
+    (ticket as any).isSenior = data.isSenior || false;
+
     // Save ticket (trigger will update available_seats automatically)
     const savedTicket = await this.ticketRepository.create(ticket);
+    
+    // Save discount records if discounts were applied
+    if (data.discountAmount && data.discountAmount > 0) {
+      const supabase = await createClient();
+      const originalPrice = (data as any).originalPrice || (data.price + data.discountAmount);
+      
+      // Use provided individual discount amounts
+      const couponDiscount = data.couponDiscount || 0;
+      const seniorDiscount = data.seniorDiscount || 0;
+      
+      // Save coupon discount if applicable
+      if (data.discountCode && couponDiscount > 0) {
+        await supabase.from("ticket_discounts").insert({
+          ticket_id: savedTicket.id,
+          discount_type: "coupon",
+          discount_code: data.discountCode,
+          discount_value: couponDiscount,
+          original_price: originalPrice,
+          discounted_price: data.price,
+        });
+        
+        // Increment coupon usage
+        const { DiscountRepository } = await import("@/infrastructure/db/supabase/DiscountRepository");
+        const discountRepo = new DiscountRepository();
+        await discountRepo.incrementUsage(data.discountCode);
+      }
+      
+      // Save senior discount if applicable
+      if (data.isSenior && seniorDiscount > 0) {
+        await supabase.from("ticket_discounts").insert({
+          ticket_id: savedTicket.id,
+          discount_type: "senior",
+          discount_code: null,
+          discount_value: seniorDiscount,
+          original_price: originalPrice,
+          discounted_price: data.price,
+        });
+      }
+    }
     
     // Note: available_seats will be updated by database trigger when ticket status becomes 'paid' or 'boarded'
     // We don't need to manually update the trip anymore

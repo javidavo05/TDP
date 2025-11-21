@@ -38,14 +38,34 @@ export default function DeparturesDisplayPage() {
 
   const fetchUpcomingTrips = async () => {
     try {
-      const response = await fetch("/api/public/trips/upcoming?hours=3");
+      // Use departures endpoint which shows next 10 hours
+      const response = await fetch("/api/public/departures");
       const data = await response.json();
       if (response.ok) {
-        let filtered = data.trips || [];
+        // Transform departures to trips format for compatibility
+        let trips = (data.departures || []).map((dep: any) => ({
+          id: dep.id,
+          departureTime: dep.departureTime,
+          arrivalTime: dep.departureTime, // Can be calculated if needed
+          price: dep.price,
+          status: dep.status,
+          route: {
+            origin: dep.routeOrigin,
+            destination: dep.routeDestination,
+          },
+          bus: {
+            plateNumber: dep.busPlateNumber,
+            busClass: dep.busClass || "economico",
+          },
+          availableSeats: dep.availableSeats,
+          totalSeats: dep.totalSeats,
+          gate: undefined,
+        }));
+
         if (selectedTerminal !== "all") {
-          filtered = filtered.filter((trip: Trip) => trip.route.origin === selectedTerminal);
+          trips = trips.filter((trip: Trip) => trip.route.origin === selectedTerminal);
         }
-        setTrips(filtered);
+        setTrips(trips);
       }
     } catch (error) {
       console.error("Error fetching upcoming trips:", error);

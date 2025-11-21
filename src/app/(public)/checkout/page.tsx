@@ -6,6 +6,7 @@ import { PAYMENT_METHODS } from "@/lib/constants";
 import { formatCurrency, calculateITBMS, ITBMS_RATE } from "@/lib/utils";
 import { YappyPaymentButton } from "@/components/payments/YappyPaymentButton";
 import { PagueloFacilPaymentButton } from "@/components/payments/PagueloFacilPaymentButton";
+import { DiscountForm } from "@/components/public/DiscountForm";
 
 function CheckoutContent() {
   const searchParams = useSearchParams();
@@ -22,6 +23,14 @@ function CheckoutContent() {
     paymentMethod: "yappy" as string,
   });
   const [ticketId, setTicketId] = useState<string | null>(null);
+  const [discount, setDiscount] = useState({
+    couponDiscount: 0,
+    seniorDiscount: 0,
+    totalDiscount: 0,
+    coupon: undefined as { id: string; code: string } | undefined,
+    isSenior: false,
+    couponCode: undefined as string | undefined,
+  });
 
   const tripId = searchParams.get("tripId");
   const seatId = searchParams.get("seatId");
@@ -58,7 +67,7 @@ function CheckoutContent() {
           const ticketResponse = await fetch("/api/public/tickets", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
+              body: JSON.stringify({
               tripId,
               seatId,
               passengerName: formData.passengerName,
@@ -66,7 +75,13 @@ function CheckoutContent() {
               passengerPhone: formData.passengerPhone,
               passengerDocumentId: formData.passengerDocumentId,
               passengerDocumentType: formData.passengerDocumentType,
-              price: trip.price,
+              price: subtotalAfterDiscount, // Price after discounts
+              originalPrice: subtotal, // Original price before discounts
+              discountAmount: discount.totalDiscount,
+              couponDiscount: discount.couponDiscount,
+              seniorDiscount: discount.seniorDiscount,
+              discountCode: discount.couponCode,
+              isSenior: discount.isSenior,
               destinationStopId: trip.routeId,
             }),
           });
@@ -166,9 +181,11 @@ function CheckoutContent() {
     );
   }
 
+  // Calculate prices with discounts
   const subtotal = trip.price;
-  const itbms = calculateITBMS(subtotal, ITBMS_RATE);
-  const total = subtotal + itbms;
+  const subtotalAfterDiscount = Math.max(0, subtotal - discount.totalDiscount);
+  const itbms = calculateITBMS(subtotalAfterDiscount, ITBMS_RATE);
+  const total = subtotalAfterDiscount + itbms;
 
   return (
     <div className="min-h-screen bg-background">
@@ -177,6 +194,12 @@ function CheckoutContent() {
 
         <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
+            {/* Discount Form */}
+            <DiscountForm
+              subtotal={subtotal}
+              onDiscountChange={setDiscount}
+            />
+
             <div className="bg-card p-6 rounded-lg shadow-md">
               <h2 className="text-xl font-semibold mb-4">Información del Pasajero</h2>
               <div className="space-y-4">
@@ -268,6 +291,30 @@ function CheckoutContent() {
                   <span>Subtotal</span>
                   <span>{formatCurrency(subtotal)}</span>
                 </div>
+                {discount.totalDiscount > 0 && (
+                  <>
+                    {discount.couponDiscount > 0 && (
+                      <div className="flex justify-between text-success">
+                        <span>Descuento Cupón</span>
+                        <span>-{formatCurrency(discount.couponDiscount)}</span>
+                      </div>
+                    )}
+                    {discount.seniorDiscount > 0 && (
+                      <div className="flex justify-between text-success">
+                        <span>Descuento Tercera Edad</span>
+                        <span>-{formatCurrency(discount.seniorDiscount)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-success font-semibold">
+                      <span>Total Descuentos</span>
+                      <span>-{formatCurrency(discount.totalDiscount)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Subtotal con Descuento</span>
+                      <span>{formatCurrency(subtotalAfterDiscount)}</span>
+                    </div>
+                  </>
+                )}
                 <div className="flex justify-between">
                   <span>ITBMS (7%)</span>
                   <span>{formatCurrency(itbms)}</span>
@@ -279,7 +326,7 @@ function CheckoutContent() {
               </div>
               {formData.paymentMethod === "yappy" ? (
                 <YappyPaymentButton
-                  amount={total}
+                  amount={subtotalAfterDiscount}
                   description={`Boleto TDP - ${formData.passengerName}`}
                   customerInfo={{
                     name: formData.passengerName,
@@ -303,7 +350,7 @@ function CheckoutContent() {
                 />
               ) : formData.paymentMethod === "paguelofacil" ? (
                 <PagueloFacilPaymentButton
-                  amount={total}
+                  amount={subtotalAfterDiscount}
                   description={`Boleto TDP - ${formData.passengerName}`}
                   customerInfo={{
                     name: formData.passengerName,

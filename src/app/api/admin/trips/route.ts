@@ -41,7 +41,55 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Admin sees all trips - for now return empty, can be extended
+    // Admin sees all trips - support filtering by date and routeId
+    const { searchParams } = new URL(request.url);
+    const date = searchParams.get("date");
+    const routeId = searchParams.get("routeId");
+
+    if (date) {
+      // Get trips for specific date
+      const targetDate = new Date(date);
+      const startDate = new Date(targetDate);
+      startDate.setUTCHours(0, 0, 0, 0);
+      const endDate = new Date(targetDate);
+      endDate.setUTCHours(23, 59, 59, 999);
+
+      const supabaseClient = await createClient();
+      let query = supabaseClient
+        .from("trips")
+        .select("*")
+        .gte("departure_time", startDate.toISOString())
+        .lte("departure_time", endDate.toISOString());
+
+      if (routeId) {
+        query = query.eq("route_id", routeId);
+      }
+
+      const { data: tripsData, error: tripsError } = await query.order("departure_time", { ascending: true });
+
+      if (tripsError) {
+        throw new Error(`Failed to fetch trips: ${tripsError.message}`);
+      }
+
+      // Map trips to entity format
+      const trips = (tripsData || []).map((t: any) => ({
+        id: t.id,
+        busId: t.bus_id,
+        routeId: t.route_id,
+        departureTime: new Date(t.departure_time).toISOString(),
+        arrivalEstimate: t.arrival_estimate ? new Date(t.arrival_estimate).toISOString() : null,
+        status: t.status,
+        currentStopId: t.current_stop_id,
+        availableSeats: t.available_seats,
+        totalSeats: t.total_seats,
+        price: parseFloat(t.price),
+        createdAt: new Date(t.created_at).toISOString(),
+        updatedAt: new Date(t.updated_at).toISOString(),
+      }));
+      return NextResponse.json({ trips, total: trips.length });
+    }
+
+    // If no date filter, return empty for now (can be extended to return all trips)
     return NextResponse.json({ trips: [], total: 0 });
   } catch (error) {
     console.error("Error fetching trips:", error);

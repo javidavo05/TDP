@@ -1,0 +1,56 @@
+{
+  "name": "TDP Ayudante",
+  "short_name": "TDP Ayudante",
+  "description": "Aplicación móvil para ayudantes de bus del sistema TDP",
+  "start_url": "/mobile/assistant",
+  "scope": "/mobile/assistant",
+  "display": "standalone",
+  "background_color": "#059669",
+  "theme_color": "#10b981",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icon-assistant-16x16.png",
+      "sizes": "16x16",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-assistant-32x32.png",
+      "sizes": "32x32",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-assistant-96x96.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-assistant-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-assistant-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "productivity", "utilities"],
+  "shortcuts": [
+    {
+      "name": "Inicio",
+      "short_name": "Inicio",
+      "description": "Ir al inicio",
+      "url": "/mobile/assistant",
+      "icons": [{ "src": "/icon-assistant-192x192.png", "sizes": "192x192" }]
+    }
+  ],
+  "permissions": [],
+  "prefer_related_applications": false
+}
+

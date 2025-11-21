@@ -3,17 +3,32 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { SeatSelector, SeatStatus } from "@/components/public/SeatSelector";
+
+interface Seat {
+  id: string;
+  number: string;
+  x: number;
+  y: number;
+  type: "single" | "double" | "aisle" | "disabled" | "extra_space" | "stair";
+  row: number;
+  column: number;
+  status: SeatStatus;
+  isAvailable: boolean;
+}
 
 export default function TripDetailPage() {
   const params = useParams();
   const router = useRouter();
   const [trip, setTrip] = useState<any>(null);
+  const [seats, setSeats] = useState<Seat[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedSeat, setSelectedSeat] = useState<string | null>(null);
 
   useEffect(() => {
     if (params.id) {
       fetchTrip();
+      fetchSeats();
     }
   }, [params.id]);
 
@@ -28,6 +43,34 @@ export default function TripDetailPage() {
       console.error("Error fetching trip:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchSeats = async () => {
+    try {
+      const response = await fetch(`/api/public/trips/${params.id}/seats`);
+      const data = await response.json();
+      if (response.ok) {
+        // Transform seats to match SeatSelector format
+        const transformedSeats: Seat[] = (data.seats || []).map((seat: any) => ({
+          id: seat.id,
+          number: seat.seat_number || seat.number || "",
+          x: seat.position_x || seat.x || 0,
+          y: seat.position_y || seat.y || 0,
+          type: seat.seat_type || seat.type || "single",
+          row: seat.row_number || seat.row || 0,
+          column: seat.column_number || seat.column || 0,
+          status: seat.type === "disabled" 
+            ? "disabled" 
+            : data.occupiedSeatIds?.includes(seat.id)
+            ? "sold"
+            : "available",
+          isAvailable: seat.isAvailable !== false && !data.occupiedSeatIds?.includes(seat.id),
+        }));
+        setSeats(transformedSeats);
+      }
+    } catch (error) {
+      console.error("Error fetching seats:", error);
     }
   };
 
@@ -69,13 +112,22 @@ export default function TripDetailPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2">
             <div className="bg-card p-6 rounded-lg shadow-md mb-6">
-              <h2 className="text-xl font-semibold mb-4">Mapa de Asientos</h2>
-              <div className="bg-muted p-8 rounded-lg text-center">
-                <p className="text-muted-foreground">
-                  Visualizador de asientos - {trip.availableSeats} disponibles de {trip.totalSeats}
-                </p>
-                <p className="text-sm mt-2">Selecciona un asiento para continuar</p>
-              </div>
+              <h2 className="text-xl font-semibold mb-4">
+                Mapa de Asientos - {trip.availableSeats} disponibles de {trip.totalSeats}
+              </h2>
+              {seats.length > 0 ? (
+                <SeatSelector
+                  seats={seats}
+                  selectedSeatId={selectedSeat}
+                  onSeatSelect={handleSeatSelect}
+                  tripId={params.id as string}
+                  showLegend={true}
+                />
+              ) : (
+                <div className="bg-muted p-8 rounded-lg text-center">
+                  <p className="text-muted-foreground">Cargando asientos...</p>
+                </div>
+              )}
             </div>
           </div>
 
