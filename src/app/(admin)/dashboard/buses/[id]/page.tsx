@@ -6,12 +6,14 @@ import { SeatMapEditor } from "@/components/bus/SeatMapEditor";
 import Link from "next/link";
 import { ArrowLeft, Save, Loader2 } from "lucide-react";
 
+type SeatType = "single" | "double" | "aisle" | "disabled" | "extra_space" | "stair" | "bathroom";
+
 interface Seat {
   id: string;
   number: string;
   x: number;
   y: number;
-  type: "single" | "double" | "aisle" | "disabled" | "extra_space" | "stair" | "bathroom";
+  type: SeatType;
   row: number;
   column: number;
   floor: number;
