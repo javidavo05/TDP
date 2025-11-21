@@ -65,12 +65,12 @@ export async function middleware(request: NextRequest) {
       },
       scanner: { 
         path: "/scanner", 
-        loginPath: "/login",
+        loginPath: "/scanner/login",
         allowedRoles: ["driver", "assistant", "admin"]
       },
       pos: { 
         path: "/pos", 
-        loginPath: "/login",
+        loginPath: "/pos/login",
         allowedRoles: ["pos_agent", "admin"]
       },
     };

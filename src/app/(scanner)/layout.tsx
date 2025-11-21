@@ -57,7 +57,7 @@ export default function ScannerLayout({
         } = await supabase.auth.getUser();
 
         if (!user) {
-          router.push("/login");
+          router.push("/scanner/login");
           return;
         }
 
@@ -71,7 +71,7 @@ export default function ScannerLayout({
         const allowedRoles = ["driver", "assistant", "admin"];
         
         if (!role || !allowedRoles.includes(role)) {
-          router.push("/login");
+          router.push("/scanner/login");
           return;
         }
         

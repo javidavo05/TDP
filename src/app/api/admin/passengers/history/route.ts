@@ -91,7 +91,7 @@ export async function GET(request: NextRequest) {
       if (passenger) {
         passengerSummary = {
           id: passenger.id,
-          name: passenger.name,
+          name: passenger.fullName,
           email: passenger.email,
           phone: passenger.phone,
           documentId: passenger.documentId,

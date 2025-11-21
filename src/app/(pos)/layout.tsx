@@ -58,7 +58,7 @@ export default function POSLayout({
         } = await supabase.auth.getUser();
 
         if (!user) {
-          router.push("/login");
+          router.push("/pos/login");
           return;
         }
 
@@ -71,7 +71,7 @@ export default function POSLayout({
         const role = userData?.role || user.user_metadata?.role;
         
         if (role !== "pos_agent" && role !== "admin") {
-          router.push("/login");
+          router.push("/pos/login");
           return;
         }
         
