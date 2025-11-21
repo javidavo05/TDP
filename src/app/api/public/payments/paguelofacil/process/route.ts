@@ -96,8 +96,8 @@ export async function POST(request: NextRequest) {
       description: description || `Boleto TDP - ${ticket.passengerName}`,
       customerInfo: {
         name: ticket.passengerName,
-        email: ticket.passengerEmail,
-        phone: ticket.passengerPhone,
+        email: ticket.passengerEmail || undefined,
+        phone: ticket.passengerPhone || undefined,
       },
       metadata: {
         ticketId: ticket.id,
