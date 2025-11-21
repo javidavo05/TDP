@@ -57,6 +57,8 @@ export default function BusDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [seats, setSeats] = useState<Seat[]>([]);
   const [layout, setLayout] = useState<any[]>([]);
+  const [busElements, setBusElements] = useState<any[]>([]);
+  const [freeSpaces, setFreeSpaces] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<"info" | "seats" | "history">("info");
   const [assignmentChanges, setAssignmentChanges] = useState<any[]>([]);
   const [loadingChanges, setLoadingChanges] = useState(false);
