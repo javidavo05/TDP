@@ -29,6 +29,7 @@ export class CardProvider implements IPaymentProvider {
           resolve({
             status: "completed",
             transactionId: `CARD-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+            amount: data.amount + data.itbms,
             metadata: {
               method: "card",
               amount: data.amount,
@@ -63,18 +64,19 @@ export class CardProvider implements IPaymentProvider {
       };
   }
 
-  async refund(transactionId: string, amount: number): Promise<{
-    status: PaymentStatus;
-    transactionId: string;
-    error?: string;
-    metadata?: Record<string, unknown>;
-  }> {
+  async refund(transactionId: string, amount: number): Promise<PaymentProviderResponse> {
     // In production, process refund through POS terminal
     return {
       status: "refunded",
       transactionId: `REFUND-${transactionId}`,
+      amount,
       metadata: { originalTransactionId: transactionId, refundAmount: amount },
     };
+  }
+
+  async processCallback(data: unknown): Promise<PaymentProviderResponse> {
+    // Card payments don't typically have callbacks
+    throw new Error("Card payments do not support callbacks");
   }
 }
 
