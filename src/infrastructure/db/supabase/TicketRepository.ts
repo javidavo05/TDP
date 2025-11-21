@@ -124,7 +124,7 @@ export class TicketRepository implements ITicketRepository {
       boarded_at: ticket.boardedAt?.toISOString() || null,
       passenger_id: ticket.passengerId || null,
       passenger_document_id: ticket.passengerDocumentId || null,
-      pos_session_id: ticket.posSessionId || null,
+      pos_session_id: (ticket as any).posSessionId || null,
     };
 
     const { data, error } = await supabase
