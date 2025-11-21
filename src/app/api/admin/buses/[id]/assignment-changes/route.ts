@@ -70,23 +70,22 @@ export async function GET(
           },
           changedAt: change.changedAt,
           assignment: assignment.data
-            ? {
-                date: assignment.data.date,
-                hour: Array.isArray(assignment.data.schedules) 
-                  ? assignment.data.schedules[0]?.hour 
-                  : assignment.data.schedules?.hour,
-                isExpress: Array.isArray(assignment.data.schedules)
-                  ? assignment.data.schedules[0]?.is_express
-                  : assignment.data.schedules?.is_express,
-                route: Array.isArray(assignment.data.schedules)
-                  ? assignment.data.schedules[0]?.routes
-                  : assignment.data.schedules?.routes
-                  ? {
-                      origin: assignment.data.schedules.routes.origin,
-                      destination: assignment.data.schedules.routes.destination,
-                    }
-                  : null,
-              }
+            ? (() => {
+                const schedule = Array.isArray(assignment.data.schedules)
+                  ? assignment.data.schedules[0]
+                  : (assignment.data.schedules as any);
+                return {
+                  date: assignment.data.date,
+                  hour: schedule?.hour,
+                  isExpress: schedule?.is_express,
+                  route: schedule?.routes
+                    ? {
+                        origin: schedule.routes.origin,
+                        destination: schedule.routes.destination,
+                      }
+                    : null,
+                };
+              })()
             : null,
         };
       })
