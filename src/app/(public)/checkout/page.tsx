@@ -40,7 +40,8 @@ function CheckoutContent() {
   });
 
   const tripId = searchParams.get("tripId");
-  const seatId = searchParams.get("seatId");
+  const seatIdsParam = searchParams.get("seatIds") || searchParams.get("seatId"); // Support both for backward compatibility
+  const seatIds = seatIdsParam ? seatIdsParam.split(',').filter(id => id.trim()) : [];
 
   useEffect(() => {
     if (tripId) {
@@ -67,40 +68,47 @@ function CheckoutContent() {
     
     // Si es Yappy o PagueloFacil, el componente manejará el pago
     if (formData.paymentMethod === "yappy" || formData.paymentMethod === "paguelofacil") {
-      // Solo crear el ticket si no existe
-      if (!ticketId) {
+      // Solo crear los tickets si no existen
+      if (!ticketId && seatIds.length > 0) {
         setProcessing(true);
         try {
-          const ticketResponse = await fetch("/api/public/tickets", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
+          // Create tickets for each seat
+          const ticketPromises = seatIds.map((seatId) =>
+            fetch("/api/public/tickets", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
-              tripId,
-              seatId,
-              passengerName: formData.passengerName,
-              passengerEmail: formData.passengerEmail,
-              passengerPhone: formData.passengerPhone,
-              passengerDocumentId: formData.passengerDocumentId,
-              passengerDocumentType: formData.passengerDocumentType,
-              price: subtotalAfterDiscount, // Price after discounts
-              originalPrice: subtotal, // Original price before discounts
-              discountAmount: discount.totalDiscount,
-              couponDiscount: discount.couponDiscount,
-              seniorDiscount: discount.seniorDiscount,
-              discountCode: discount.couponCode,
-              isSenior: discount.isSenior,
-              destinationStopId: trip.routeId,
-            }),
-          });
+                tripId,
+                seatId,
+                passengerName: formData.passengerName,
+                passengerEmail: formData.passengerEmail,
+                passengerPhone: formData.passengerPhone,
+                passengerDocumentId: formData.passengerDocumentId,
+                passengerDocumentType: formData.passengerDocumentType,
+                price: subtotalAfterDiscount / seatIds.length, // Price per ticket after discounts
+                originalPrice: subtotal / seatIds.length, // Original price per ticket before discounts
+                discountAmount: discount.totalDiscount / seatIds.length,
+                couponDiscount: discount.couponDiscount / seatIds.length,
+                seniorDiscount: discount.seniorDiscount / seatIds.length,
+                discountCode: discount.couponCode,
+                isSenior: discount.isSenior,
+                destinationStopId: trip.routeId,
+              }),
+            })
+          );
 
-          const ticketData = await ticketResponse.json();
-          if (!ticketResponse.ok) {
-            throw new Error(ticketData.error);
+          const ticketResponses = await Promise.all(ticketPromises);
+          const ticketDataArray = await Promise.all(ticketResponses.map(r => r.json()));
+          
+          const failedTicket = ticketDataArray.find((data, index) => !ticketResponses[index].ok);
+          if (failedTicket) {
+            throw new Error(failedTicket.error || "Error al crear los tickets");
           }
 
-          setTicketId(ticketData.ticket.id);
+          // Store first ticket ID for payment processing
+          setTicketId(ticketDataArray[0].ticket.id);
         } catch (error) {
-          alert((error as Error).message || "Error al crear el ticket");
+          alert((error as Error).message || "Error al crear los tickets");
         } finally {
           setProcessing(false);
         }
@@ -111,29 +119,45 @@ function CheckoutContent() {
     setProcessing(true);
 
     try {
-      // Create ticket
-      const ticketResponse = await fetch("/api/public/tickets", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          tripId,
-          seatId,
-          passengerName: formData.passengerName,
-          passengerEmail: formData.passengerEmail,
-          passengerPhone: formData.passengerPhone,
-          passengerDocumentId: formData.passengerDocumentId,
-          passengerDocumentType: formData.passengerDocumentType,
-          price: trip.price,
-          destinationStopId: trip.routeId, // This should come from trip data
-        }),
-      });
-
-      const ticketData = await ticketResponse.json();
-      if (!ticketResponse.ok) {
-        throw new Error(ticketData.error);
+      // Create tickets for each seat
+      if (seatIds.length === 0) {
+        throw new Error("No se han seleccionado asientos");
       }
 
-      setTicketId(ticketData.ticket.id);
+      const ticketPromises = seatIds.map((seatId) =>
+        fetch("/api/public/tickets", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tripId,
+            seatId,
+            passengerName: formData.passengerName,
+            passengerEmail: formData.passengerEmail,
+            passengerPhone: formData.passengerPhone,
+            passengerDocumentId: formData.passengerDocumentId,
+            passengerDocumentType: formData.passengerDocumentType,
+            price: subtotalAfterDiscount / seatIds.length, // Price per ticket after discounts
+            originalPrice: subtotal / seatIds.length, // Original price per ticket before discounts
+            discountAmount: discount.totalDiscount / seatIds.length,
+            couponDiscount: discount.couponDiscount / seatIds.length,
+            seniorDiscount: discount.seniorDiscount / seatIds.length,
+            discountCode: discount.couponCode,
+            isSenior: discount.isSenior,
+            destinationStopId: trip.routeId,
+          }),
+        })
+      );
+
+      const ticketResponses = await Promise.all(ticketPromises);
+      const ticketDataArray = await Promise.all(ticketResponses.map(r => r.json()));
+      
+      const failedTicket = ticketDataArray.find((data, index) => !ticketResponses[index].ok);
+      if (failedTicket) {
+        throw new Error(failedTicket.error || "Error al crear los tickets");
+      }
+
+      // Store first ticket ID for payment processing
+      setTicketId(ticketDataArray[0].ticket.id);
 
       // Si el método de pago es Yappy, no procesamos el pago aquí
       // El botón Yappy lo manejará
@@ -162,8 +186,8 @@ function CheckoutContent() {
         throw new Error(paymentData.error);
       }
 
-      // Redirect to success page
-      router.push(`/tickets/${ticketData.ticket.id}?success=true`);
+      // Redirect to success page (first ticket)
+      router.push(`/tickets/${ticketDataArray[0].ticket.id}?success=true`);
     } catch (error) {
       console.error("Error processing checkout:", error);
       alert((error as Error).message || "Error al procesar la compra");
@@ -188,8 +212,9 @@ function CheckoutContent() {
     );
   }
 
-  // Calculate prices with discounts
-  const subtotal = trip.price;
+  // Calculate prices with discounts (multiply by number of seats)
+  const seatCount = seatIds.length || 1;
+  const subtotal = trip.price * seatCount;
   const subtotalAfterDiscount = Math.max(0, subtotal - discount.totalDiscount);
   const itbms = calculateITBMS(subtotalAfterDiscount, ITBMS_RATE);
   const total = subtotalAfterDiscount + itbms;
@@ -293,7 +318,24 @@ function CheckoutContent() {
           <div className="lg:col-span-1">
             <div className="bg-card p-6 rounded-lg shadow-md sticky top-4">
               <h2 className="text-xl font-semibold mb-4">Resumen</h2>
+              {seatIds.length > 1 && (
+                <div className="mb-4 p-3 bg-muted rounded-lg">
+                  <p className="text-sm text-muted-foreground">
+                    {seatIds.length} asientos seleccionados
+                  </p>
+                </div>
+              )}
               <div className="space-y-2 mb-4">
+                <div className="flex justify-between">
+                  <span>Precio por asiento</span>
+                  <span>{formatCurrency(trip.price)}</span>
+                </div>
+                {seatIds.length > 1 && (
+                  <div className="flex justify-between text-sm text-muted-foreground">
+                    <span>× {seatIds.length} asientos</span>
+                    <span>{formatCurrency(trip.price * seatIds.length)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span>Subtotal</span>
                   <span>{formatCurrency(subtotal)}</span>

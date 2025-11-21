@@ -25,7 +25,7 @@ export default function TripDetailPage() {
   const [busElements, setBusElements] = useState<any[]>([]);
   const [freeSpaces, setFreeSpaces] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedSeat, setSelectedSeat] = useState<string | null>(null);
+  const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
 
   useEffect(() => {
     if (params.id) {
@@ -79,12 +79,21 @@ export default function TripDetailPage() {
   };
 
   const handleSeatSelect = (seatId: string) => {
-    setSelectedSeat(seatId);
+    setSelectedSeats((prev) => {
+      if (prev.includes(seatId)) {
+        // Remove seat if already selected
+        return prev.filter((id) => id !== seatId);
+      } else {
+        // Add seat to selection
+        return [...prev, seatId];
+      }
+    });
   };
 
   const handleContinue = () => {
-    if (selectedSeat && trip) {
-      router.push(`/checkout?tripId=${trip.id}&seatId=${selectedSeat}`);
+    if (selectedSeats.length > 0 && trip) {
+      const seatIdsParam = selectedSeats.join(',');
+      router.push(`/checkout?tripId=${trip.id}&seatIds=${seatIdsParam}`);
     }
   };
 
@@ -122,7 +131,7 @@ export default function TripDetailPage() {
               {seats.length > 0 ? (
                 <SeatSelector
                   seats={seats}
-                  selectedSeatId={selectedSeat}
+                  selectedSeatIds={selectedSeats}
                   onSeatSelect={handleSeatSelect}
                   tripId={params.id as string}
                   showLegend={true}
@@ -159,13 +168,31 @@ export default function TripDetailPage() {
                 </div>
               </div>
 
-              {selectedSeat && (
-                <button
-                  onClick={handleContinue}
-                  className="w-full px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 font-semibold"
-                >
-                  Continuar al Pago
-                </button>
+              {selectedSeats.length > 0 && (
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-2">Asientos seleccionados:</p>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedSeats.map((seatId) => {
+                        const seat = seats.find((s) => s.id === seatId);
+                        return (
+                          <span
+                            key={seatId}
+                            className="px-3 py-1 bg-primary text-primary-foreground rounded-lg text-sm font-semibold"
+                          >
+                            {seat?.number || seatId}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleContinue}
+                    className="w-full px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 font-semibold"
+                  >
+                    Continuar al Pago ({selectedSeats.length} {selectedSeats.length === 1 ? 'asiento' : 'asientos'})
+                  </button>
+                </div>
               )}
             </div>
           </div>

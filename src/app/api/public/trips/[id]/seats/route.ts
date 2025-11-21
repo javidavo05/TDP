@@ -54,6 +54,16 @@ export async function GET(
 
     const occupiedSeatIds = new Set(ticketsData.map((ticket) => ticket.seat_id));
 
+    // Helper function to determine if a seat type is selectable (countable)
+    const isSeatTypeSelectable = (type: string): boolean => {
+      // Exclude bathroom, stair, aisle - these are not selectable or countable
+      return type !== "bathroom" && type !== "stair" && type !== "aisle";
+    };
+
+    // Filter out non-selectable seats and calculate availability
+    const selectableSeats = busSeatMap.seats.filter((seat: any) => isSeatTypeSelectable(seat.type));
+    const occupiedSelectableSeats = selectableSeats.filter((seat: any) => occupiedSeatIds.has(seat.id));
+    
     const seatsWithAvailability = busSeatMap.seats.map((seat: any) => ({
       ...seat,
       isAvailable: !occupiedSeatIds.has(seat.id),
@@ -61,9 +71,9 @@ export async function GET(
 
     return NextResponse.json({
       tripId: tripData.id,
-      totalSeats: tripData.total_seats,
-      availableSeats: tripData.available_seats,
-      occupiedSeats: occupiedSeatIds.size,
+      totalSeats: selectableSeats.length, // Only count selectable seats
+      availableSeats: selectableSeats.length - occupiedSelectableSeats.length, // Only count available selectable seats
+      occupiedSeats: occupiedSelectableSeats.length,
       seats: seatsWithAvailability,
       occupiedSeatIds: Array.from(occupiedSeatIds), // Include as array for easier use
       busElements: busSeatMap.busElements || [],

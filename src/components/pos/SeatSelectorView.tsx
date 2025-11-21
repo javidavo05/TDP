@@ -101,9 +101,15 @@ export function SeatSelectorView({
     }
   };
 
+  // Helper function to determine if a seat type is selectable
+  const isSeatTypeSelectable = (type: string): boolean => {
+    // Exclude bathroom, stair, aisle - these are not selectable
+    return type !== "bathroom" && type !== "stair" && type !== "aisle";
+  };
+
   const handleSeatClick = (seatId: string) => {
     const seat = seats.find((s) => s.id === seatId);
-    if (seat && seat.isAvailable) {
+    if (seat && seat.isAvailable && isSeatTypeSelectable(seat.type)) {
       // Only allow interaction if no external selected seat ID is provided (view-only mode)
       if (externalSelectedSeatId === null) {
         setInternalSelectedSeatId(seatId);
@@ -176,7 +182,8 @@ export function SeatSelectorView({
                 {seats.map((seat) => {
                   // If external selected seat IDs are provided, disable all interactions (view-only mode)
                   const isViewOnly = externalSelectedSeatIds.length > 0 || (externalSelectedSeatId !== null && externalSelectedSeatId !== undefined);
-                  const isClickable = !isViewOnly && seat.isAvailable && seat.status !== "sold";
+                  const isSelectable = isSeatTypeSelectable(seat.type);
+                  const isClickable = !isViewOnly && isSelectable && seat.isAvailable && seat.status !== "sold";
                   const isSelected = selectedSeatIds.includes(seat.id);
                   
                   return (

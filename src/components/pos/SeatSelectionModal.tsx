@@ -87,9 +87,15 @@ export function SeatSelectionModal({
     }
   };
 
+  // Helper function to determine if a seat type is selectable
+  const isSeatTypeSelectable = (type: string): boolean => {
+    // Exclude bathroom, stair, aisle - these are not selectable
+    return type !== "bathroom" && type !== "stair" && type !== "aisle";
+  };
+
   const handleSeatClick = (seatId: string) => {
     const seat = seats.find((s) => s.id === seatId);
-    if (seat && seat.isAvailable) {
+    if (seat && seat.isAvailable && isSeatTypeSelectable(seat.type)) {
       if (allowMultiple) {
         // Toggle selection
         const newSelected = internalSelectedSeatIds.includes(seatId)
@@ -186,7 +192,8 @@ export function SeatSelectionModal({
 
                   {/* Seats */}
                   {seats.map((seat) => {
-                    const isClickable = seat.isAvailable && seat.status !== "sold";
+                    const isSelectable = isSeatTypeSelectable(seat.type);
+                    const isClickable = isSelectable && seat.isAvailable && seat.status !== "sold";
                     
                     return (
                       <button

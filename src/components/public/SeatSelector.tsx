@@ -44,6 +44,7 @@ interface FreeSpaceElement {
 interface SeatSelectorProps {
   seats: Seat[];
   selectedSeatId?: string | null;
+  selectedSeatIds?: string[]; // Support multiple selections
   onSeatSelect: (seatId: string) => void;
   lockedSeats?: string[];
   tripId: string;
@@ -83,6 +84,7 @@ const getSeatSize = (seat: Seat): { width: number; height: number } => {
 export function SeatSelector({
   seats,
   selectedSeatId,
+  selectedSeatIds = [],
   onSeatSelect,
   lockedSeats = [],
   tripId,
@@ -92,6 +94,13 @@ export function SeatSelector({
   freeSpaces = [],
 }: SeatSelectorProps) {
   const [hoveredSeat, setHoveredSeat] = useState<string | null>(null);
+  
+  // Combine selectedSeatId and selectedSeatIds for display
+  const allSelectedSeatIds = selectedSeatIds.length > 0 
+    ? selectedSeatIds 
+    : selectedSeatId 
+    ? [selectedSeatId] 
+    : [];
   const [svgTemplate, setSvgTemplate] = useState<string>("");
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
@@ -179,7 +188,7 @@ export function SeatSelector({
   const logicalToPhysicalHeight = (logicalHeight: number) => logicalHeight * getScaleY();
 
   const getSeatColor = (seat: Seat): string => {
-    if (seat.id === selectedSeatId) {
+    if (allSelectedSeatIds.includes(seat.id)) {
       return "bg-primary text-primary-foreground ring-2 ring-primary ring-offset-2";
     }
     if (lockedSeats.includes(seat.id) || seat.isLocked) {
@@ -212,8 +221,15 @@ export function SeatSelector({
     return null;
   };
 
+  // Helper function to determine if a seat type is selectable
+  const isSeatTypeSelectable = (type: string): boolean => {
+    // Exclude bathroom, stair, aisle - these are not selectable
+    return type !== "bathroom" && type !== "stair" && type !== "aisle";
+  };
+
   const isSeatClickable = (seat: Seat): boolean => {
     return (
+      isSeatTypeSelectable(seat.type) &&
       seat.isAvailable &&
       seat.status !== "sold" &&
       seat.status !== "stair" &&
@@ -308,7 +324,7 @@ export function SeatSelector({
         {/* Seats */}
         {seats.map((seat) => {
           const clickable = isSeatClickable(seat);
-          const isSelected = seat.id === selectedSeatId;
+          const isSelected = allSelectedSeatIds.includes(seat.id);
           const seatSize = getSeatSize(seat);
           
           return (
