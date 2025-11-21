@@ -191,13 +191,13 @@ export default function TerminalPOSPage() {
       </div>
 
       {/* Render POS page with session context */}
-      <POSPageWithSession terminalId={terminalId} sessionId={session.id} />
+      <POSPageWithSession params={{ terminalId, sessionId: session.id }} />
     </div>
   );
 }
 
 // Wrapper component that provides session context to POSPage
-function POSPageWithSession({ terminalId, sessionId }: { terminalId: string; sessionId: string }) {
-  return <POSPage terminalId={terminalId} sessionId={sessionId} />;
+function POSPageWithSession({ params }: { params: { terminalId: string; sessionId: string } }) {
+  return <POSPage params={params} />;
 }
 
