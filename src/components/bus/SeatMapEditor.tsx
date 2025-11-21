@@ -1,14 +1,23 @@
 "use client";
 
 import { useState, useRef, useEffect, useMemo } from "react";
-import { X, ArrowUp, ArrowDown, ZoomIn, ZoomOut, RotateCcw, Accessibility, Layers, GripVertical, Bath, Settings, Move, Maximize2 } from "lucide-react";
+import { X, ArrowUp, ArrowDown, Accessibility, Layers, GripVertical, Bath, Settings, Move, Maximize2, Ruler, MousePointer2, Undo2 } from "lucide-react";
 
-type SeatType = "single" | "double" | "aisle" | "disabled" | "extra_space" | "stair" | "bathroom";
-type BusElementType = "driver" | "frontDoor" | "rearDoor";
+type SeatType = "single" | "double" | "aisle" | "disabled" | "extra_space" | "stair" | "bathroom" | "free_space";
+type BusElementType = "frontDoor" | "rearDoor";
 
 interface BusElement {
   id: string;
   type: BusElementType;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  floor: number;
+}
+
+interface FreeSpaceElement {
+  id: string;
   x: number;
   y: number;
   width: number;
@@ -52,16 +61,15 @@ interface SeatMapEditorProps {
 }
 
 const SNAP_GRID_SIZE = 20; // Grid size in pixels for snapping
-const MIN_ZOOM = 0.25; // 25% - allows seeing full bus
-const MAX_ZOOM = 2.0; // 200%
-const ZOOM_STEP = 0.25;
+// Zoom removed - SVG always fits viewport
 // Bus dimensions - horizontal orientation (wider than tall) - Top view style
 const BUS_LENGTH = 2000; // Length of the bus in pixels (horizontal, FRONT to BACK)
 const BUS_WIDTH = 600; // Width of the bus in pixels (vertical, side to side)
-const CANVAS_WIDTH = 2400; // Canvas width to accommodate bus + margins
-const CANVAS_HEIGHT = 1600; // Canvas height to accommodate two floors stacked vertically
-const SEAT_WIDTH = 32; // Smaller seats to fit more in the bus
-const SEAT_HEIGHT = 24; // Smaller seats to fit more in the bus
+// Canvas dimensions match SVG viewBox
+const CANVAS_WIDTH = 4200; // SVG viewBox width
+const CANVAS_HEIGHT = 2550; // SVG viewBox height
+const SEAT_WIDTH = 180; // Base seat width (90 * 2 = 180)
+const SEAT_HEIGHT = 134; // Base seat height (67 * 2 = 134)
 const SEAT_MARGIN = 4; // Margin between seats
 const AISLE_WIDTH = 60; // Width of central aisle/hall (vertical in top view)
 const STAIR_WIDTH = 50; // Width of stairs
@@ -71,6 +79,40 @@ const FLOOR_OFFSET = 120; // Vertical offset between floors (spacing between Top
 // Snap coordinate to nearest grid point
 const snapToGrid = (value: number, gridSize: number = SNAP_GRID_SIZE): number => {
   return Math.round(value / gridSize) * gridSize;
+};
+
+// Snap to nearest guide (horizontal or vertical ruler)
+const snapToGuides = (value: number, guides: number[], threshold: number = 10): number | null => {
+  for (const guideValue of guides) {
+    if (Math.abs(value - guideValue) < threshold) {
+      return guideValue;
+    }
+  }
+  return null;
+};
+
+// Enhanced snap function that considers both grid and guides (horizontal and vertical)
+const snapValue = (
+  value: number, 
+  horizontalGuides: number[], 
+  verticalGuides: number[],
+  snapToGridEnabled: boolean, 
+  snapToGuidesEnabled: boolean,
+  isHorizontal: boolean
+): number => {
+  const guides = isHorizontal ? horizontalGuides : verticalGuides;
+  // First try to snap to guides (higher priority)
+  if (snapToGuidesEnabled && guides.length > 0) {
+    const snappedToGuide = snapToGuides(value, guides);
+    if (snappedToGuide !== null) {
+      return snappedToGuide;
+    }
+  }
+  // Then snap to grid
+  if (snapToGridEnabled) {
+    return snapToGrid(value);
+  }
+  return value;
 };
 
 export function SeatMapEditor({ 
@@ -85,27 +127,42 @@ export function SeatMapEditor({
   );
   const [selectedSeatType, setSelectedSeatType] = useState<SeatType>("single");
   
-  // Bus layout customization state
-  const [busLength, setBusLength] = useState(BUS_LENGTH);
-  const [busWidth, setBusWidth] = useState(BUS_WIDTH);
+  // Canvas size customization state
+  const [canvasScale, setCanvasScale] = useState(100); // Percentage scale (50-200%)
   const [showLayoutSettings, setShowLayoutSettings] = useState(false);
+  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 }); // Actual rendered size
   
-  // Bus elements (driver, doors) as editable elements
-  const [busElements, setBusElements] = useState<BusElement[]>([
-    { id: "driver-1", type: "driver", x: 2, y: 2, width: 96, height: 64, floor: 1 },
-    { id: "frontDoor-1", type: "frontDoor", x: 112, y: 0, width: 64, height: 80, floor: 1 },
-    { id: "rearDoor-1", type: "rearDoor", x: BUS_LENGTH - 80, y: 0, width: 64, height: 80, floor: 1 },
-  ]);
+  // Bus elements (doors) as editable elements - now optional, user can add them
+  const [busElements, setBusElements] = useState<BusElement[]>([]);
+
+  // Free space elements (rectangles)
+  const [freeSpaces, setFreeSpaces] = useState<FreeSpaceElement[]>([]);
+  const [creatingFreeSpace, setCreatingFreeSpace] = useState(false);
+  const [freeSpaceStart, setFreeSpaceStart] = useState<{ x: number; y: number } | null>(null);
+  const [freeSpaceCurrent, setFreeSpaceCurrent] = useState<{ x: number; y: number } | null>(null);
+  const [selectedFreeSpace, setSelectedFreeSpace] = useState<string | null>(null);
+  const [draggingFreeSpace, setDraggingFreeSpace] = useState<string | null>(null);
+  const [resizingFreeSpace, setResizingFreeSpace] = useState<string | null>(null);
   
   const [selectedElement, setSelectedElement] = useState<string | null>(null);
   const [draggingElement, setDraggingElement] = useState<string | null>(null);
   const [resizingElement, setResizingElement] = useState<string | null>(null);
   const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 });
+  const [resizeHandle, setResizeHandle] = useState<string | null>(null); // 'n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'
   const [editMode, setEditMode] = useState<"seats" | "elements">("seats");
+  
+  // History for undo functionality
+  interface HistoryState {
+    seats: Seat[];
+    busElements: BusElement[];
+    freeSpaces: FreeSpaceElement[];
+  }
+  const [history, setHistory] = useState<HistoryState[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+  const [selectedElementType, setSelectedElementType] = useState<"frontDoor" | "rearDoor" | null>(null);
   
   // Size multipliers for groups (1.0 = 100%, 1.5 = 150%, etc.)
   const [sizeMultipliers, setSizeMultipliers] = useState({
-    driver: 1.0,
     doors: 1.0,
     stairs: 1.0,
     seats: 1.0,
@@ -119,14 +176,428 @@ export function SeatMapEditor({
   const [editingNumber, setEditingNumber] = useState<string>("");
   const [showGrid, setShowGrid] = useState(false);
   const [snapEnabled, setSnapEnabled] = useState(true);
-  const [zoom, setZoom] = useState(0.5); // Start with zoom out to see more
-  const [pan, setPan] = useState({ x: 0, y: 0 });
+  // No zoom - SVG always fits viewport
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [layoutMode, setLayoutMode] = useState<"free" | "grid">("free"); // Free placement or grid layout
+  
+  // Horizontal and vertical guides (rulers) for perfect alignment
+  const [horizontalGuides, setHorizontalGuides] = useState<number[]>([]);
+  const [verticalGuides, setVerticalGuides] = useState<number[]>([]);
+  const [addingGuide, setAddingGuide] = useState<"horizontal" | "vertical" | false>(false);
+  
+  // Multi-selection state
+  const [selectedSeats, setSelectedSeats] = useState<Set<string>>(new Set());
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectionBox, setSelectionBox] = useState<{ start: { x: number; y: number }; end: { x: number; y: number } } | null>(null);
+  const [isSelecting, setIsSelecting] = useState(false);
+  const [multiDragOffset, setMultiDragOffset] = useState<{ x: number; y: number } | null>(null);
+  
   const canvasRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  
+  // Calculate canvas size to fit viewport
+  useEffect(() => {
+    if (!containerRef.current) return;
+    
+    const calculateCanvasSize = () => {
+      const container = containerRef.current;
+      if (!container) return;
+      
+      const containerWidth = container.clientWidth;
+      const containerHeight = container.clientHeight;
+      
+      if (containerWidth === 0 || containerHeight === 0) return;
+      
+      // Canvas logical dimensions (matches SVG viewBox: 4200x2550)
+      const canvasAspectRatio = CANVAS_WIDTH / CANVAS_HEIGHT; // 4200/2550 = 1.647...
+      
+      // Calculate maximum size that fits in viewport
+      let maxWidth = containerWidth;
+      let maxHeight = maxWidth / canvasAspectRatio;
+      
+      if (maxHeight > containerHeight) {
+        maxHeight = containerHeight;
+        maxWidth = maxHeight * canvasAspectRatio;
+      }
+      
+      // Apply scale percentage
+      const scaledWidth = (maxWidth * canvasScale) / 100;
+      const scaledHeight = (maxHeight * canvasScale) / 100;
+      
+      setCanvasSize({ width: scaledWidth, height: scaledHeight });
+    };
+    
+    calculateCanvasSize();
+    
+    const resizeObserver = new ResizeObserver(calculateCanvasSize);
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current);
+    }
+    
+    window.addEventListener('resize', calculateCanvasSize);
+    
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener('resize', calculateCanvasSize);
+    };
+  }, [canvasScale]);
+
+  // Load SVG on mount - keep original viewBox
+  useEffect(() => {
+    fetch('/SVG_layout/layout bus.svg')
+      .then(res => res.text())
+      .then(svg => {
+        // Remove XML declaration and DOCTYPE, keep the full SVG
+        let svgContent = svg.replace(/<\?xml[^>]*\?>/, '').replace(/<!DOCTYPE[^>]*>/, '').trim();
+        
+        // Keep the original viewBox from the SVG (0 0 4200 2550)
+        // Don't modify it - the SVG already has the correct viewBox
+        // Just ensure width and height are set to 100% for scaling
+        svgContent = svgContent.replace(
+          /width="[^"]*"/,
+          'width="100%"'
+        ).replace(
+          /height="[^"]*"/,
+          'height="100%"'
+        );
+        
+        // Ensure preserveAspectRatio is set for proper scaling
+        if (!svgContent.includes('preserveAspectRatio')) {
+          svgContent = svgContent.replace(
+            /<svg([^>]*)>/,
+            `<svg$1 preserveAspectRatio="xMidYMid meet">`
+          );
+        }
+        
+        setSvgTemplate(svgContent);
+      })
+      .catch(err => {
+        console.error('Error loading SVG:', err);
+      });
+  }, []);
+
+  // Delete element function
+  const deleteElement = (elementId: string, type: 'seat' | 'busElement' | 'freeSpace') => {
+    if (type === 'seat') {
+      setSeats(prev => prev.filter(s => s.id !== elementId));
+    } else if (type === 'busElement') {
+      setBusElements(prev => prev.filter(el => el.id !== elementId));
+      if (selectedElement === elementId) {
+        setSelectedElement(null);
+      }
+    } else if (type === 'freeSpace') {
+      setFreeSpaces(prev => prev.filter(fs => fs.id !== elementId));
+      if (selectedFreeSpace === elementId) {
+        setSelectedFreeSpace(null);
+      }
+    }
+    saveToHistory();
+  };
+
+  // Handle keyboard delete and arrow key movement
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't handle keyboard events if user is typing in an input
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      // Delete selected items
+      if ((e.key === 'Delete' || e.key === 'Backspace') && !editingSeatId) {
+        if (selectedElement) {
+          deleteElement(selectedElement, 'busElement');
+        } else if (selectedFreeSpace) {
+          deleteElement(selectedFreeSpace, 'freeSpace');
+        } else if (selectedSeats.size > 0) {
+          // Delete all selected seats
+          setSeats(prev => prev.filter(s => !selectedSeats.has(s.id)));
+          setSelectedSeats(new Set());
+          saveToHistory();
+        }
+        return;
+      }
+
+      // Undo with Ctrl+Z or Cmd+Z
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        handleUndo();
+        return;
+      }
+
+      // Arrow key movement for selected items
+      if ((e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !editingSeatId) {
+        // Don't prevent default if user is typing in an input
+        if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+          return;
+        }
+        
+        e.preventDefault();
+        
+        // Determine movement direction and amount
+        // Normal: 5px per keypress, Shift: 20px, Ctrl/Cmd: 1px (fine adjustment)
+        let step = 5;
+        if (e.shiftKey) {
+          step = 20; // Large movement with Shift
+        } else if (e.ctrlKey || e.metaKey) {
+          step = 1; // Fine adjustment with Ctrl/Cmd
+        }
+        
+        let deltaX = 0;
+        let deltaY = 0;
+
+        if (e.key === 'ArrowUp') deltaY = -step;
+        else if (e.key === 'ArrowDown') deltaY = step;
+        else if (e.key === 'ArrowLeft') deltaX = -step;
+        else if (e.key === 'ArrowRight') deltaX = step;
+
+        // Move selected seats
+        if (selectedSeats.size > 0) {
+          setSeats((prev) =>
+            prev.map((seat) => {
+              if (selectedSeats.has(seat.id) && seat.floor === selectedFloor) {
+                let newX = seat.x + deltaX;
+                let newY = seat.y + deltaY;
+
+                // Apply snap if enabled
+                if (snapEnabled) {
+                  newX = snapValue(newX, horizontalGuides, verticalGuides, snapEnabled, true, false);
+                  newY = snapValue(newY, horizontalGuides, verticalGuides, snapEnabled, true, true);
+                }
+
+                const margin = 20;
+                return {
+                  ...seat,
+                  x: Math.max(margin, Math.min(newX, CANVAS_WIDTH - getSeatWidth(seat.type) - margin)),
+                  y: Math.max(margin, Math.min(newY, CANVAS_HEIGHT - SEAT_HEIGHT - margin)),
+                };
+              }
+              return seat;
+            })
+          );
+        }
+
+        // Move selected bus element
+        if (selectedElement) {
+          const element = busElements.find(el => el.id === selectedElement);
+          if (element && element.floor === selectedFloor) {
+            let newX = element.x + deltaX;
+            let newY = element.y + deltaY;
+
+            // Apply snap if enabled
+            if (snapEnabled) {
+              newX = snapValue(newX, horizontalGuides, verticalGuides, snapEnabled, true, false);
+              newY = snapValue(newY, horizontalGuides, verticalGuides, snapEnabled, true, true);
+            }
+
+            const margin = 20;
+            setBusElements((prev) =>
+              prev.map((el) =>
+                el.id === selectedElement
+                  ? {
+                      ...el,
+                      x: Math.max(margin, Math.min(newX, CANVAS_WIDTH - el.width - margin)),
+                      y: Math.max(margin, Math.min(newY, CANVAS_HEIGHT - el.height - margin)),
+                    }
+                  : el
+              )
+            );
+          }
+        }
+
+        // Move selected free space
+        if (selectedFreeSpace) {
+          const freeSpace = freeSpaces.find(fs => fs.id === selectedFreeSpace);
+          if (freeSpace && freeSpace.floor === selectedFloor) {
+            let newX = freeSpace.x + deltaX;
+            let newY = freeSpace.y + deltaY;
+
+            // Apply snap if enabled
+            if (snapEnabled) {
+              newX = snapValue(newX, horizontalGuides, verticalGuides, snapEnabled, true, false);
+              newY = snapValue(newY, horizontalGuides, verticalGuides, snapEnabled, true, true);
+            }
+
+            const margin = 20;
+            setFreeSpaces((prev) =>
+              prev.map((fs) =>
+                fs.id === selectedFreeSpace
+                  ? {
+                      ...fs,
+                      x: Math.max(margin, Math.min(newX, CANVAS_WIDTH - fs.width - margin)),
+                      y: Math.max(margin, Math.min(newY, CANVAS_HEIGHT - fs.height - margin)),
+                    }
+                  : fs
+              )
+            );
+          }
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedElement, selectedFreeSpace, editingSeatId, selectedSeats, selectedFloor, snapEnabled, horizontalGuides, verticalGuides, busElements, freeSpaces]);
+
+  // Free space creation handlers
+  const handleFreeSpaceMouseDown = (e: React.MouseEvent) => {
+    if (selectedSeatType !== "free_space" || editMode !== "seats" || isPanning) return;
+    e.stopPropagation();
+    const { x, y } = getCanvasCoordinates(e);
+    setCreatingFreeSpace(true);
+    setFreeSpaceStart({ x, y });
+    setFreeSpaceCurrent({ x, y });
+  };
+
+  const handleFreeSpaceMouseMove = (e: React.MouseEvent) => {
+    if (!creatingFreeSpace || !freeSpaceStart) return;
+    const { x, y } = getCanvasCoordinates(e);
+    setFreeSpaceCurrent({ x, y });
+  };
+
+  const handleFreeSpaceMouseUp = (e: React.MouseEvent) => {
+    if (!creatingFreeSpace || !freeSpaceStart || !freeSpaceCurrent) return;
+    
+    const startX = Math.min(freeSpaceStart.x, freeSpaceCurrent.x);
+    const startY = Math.min(freeSpaceStart.y, freeSpaceCurrent.y);
+    const width = Math.abs(freeSpaceCurrent.x - freeSpaceStart.x);
+    const height = Math.abs(freeSpaceCurrent.y - freeSpaceStart.y);
+
+    if (width > 10 && height > 10) {
+      const newFreeSpace: FreeSpaceElement = {
+        id: `freespace-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+        x: snapEnabled ? snapToGrid(startX) : startX,
+        y: snapEnabled ? snapToGrid(startY) : startY,
+        width: snapEnabled ? snapToGrid(width) : width,
+        height: snapEnabled ? snapToGrid(height) : height,
+        floor: selectedFloor,
+      };
+      setFreeSpaces(prev => [...prev, newFreeSpace]);
+      saveToHistory();
+    }
+
+    setCreatingFreeSpace(false);
+    setFreeSpaceStart(null);
+    setFreeSpaceCurrent(null);
+  };
+
+  // Free space drag handlers
+  const handleFreeSpaceDragStart = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (editMode !== "elements" || isPanning || resizingFreeSpace) return;
+    const freeSpace = freeSpaces.find(fs => fs.id === id);
+    if (!freeSpace || freeSpace.floor !== selectedFloor) return;
+    const { x: mouseX, y: mouseY } = getCanvasCoordinates(e);
+    setDraggingFreeSpace(id);
+    setSelectedFreeSpace(id);
+    setDragOffset({
+      x: mouseX - freeSpace.x,
+      y: mouseY - freeSpace.y,
+    });
+  };
+
+  const handleFreeSpaceDrag = (e: React.MouseEvent) => {
+    if (!draggingFreeSpace || !canvasRef.current || isPanning) return;
+    const { x: mouseX, y: mouseY } = getCanvasCoordinates(e);
+    let x = mouseX - dragOffset.x;
+    let y = mouseY - dragOffset.y;
+
+    if (snapEnabled) {
+      x = snapToGrid(x);
+      y = snapToGrid(y);
+    }
+
+    setFreeSpaces(prev =>
+      prev.map(fs =>
+        fs.id === draggingFreeSpace
+          ? { ...fs, x, y }
+          : fs
+      )
+    );
+  };
+
+  const handleFreeSpaceDragEnd = () => {
+    if (draggingFreeSpace) {
+      saveToHistory();
+    }
+    setDraggingFreeSpace(null);
+  };
+
+  // Free space resize handlers with multi-directional resize
+  const handleFreeSpaceResizeStart = (id: string, handle: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (editMode !== "elements" || draggingFreeSpace) return;
+    const freeSpace = freeSpaces.find(fs => fs.id === id);
+    if (!freeSpace || freeSpace.floor !== selectedFloor) return;
+    const { x: mouseX, y: mouseY } = getCanvasCoordinates(e);
+    setResizingFreeSpace(id);
+    setResizeHandle(handle);
+    setSelectedFreeSpace(id);
+    setResizeStart({
+      x: mouseX,
+      y: mouseY,
+      width: freeSpace.width,
+      height: freeSpace.height,
+    });
+  };
+
+  // handleFreeSpaceResize is now handled globally via useEffect below
+
+  const handleFreeSpaceResizeEnd = () => {
+    if (resizingFreeSpace) {
+      saveToHistory();
+    }
+    setResizingFreeSpace(null);
+    setResizeHandle(null);
+  };
+
+  // Save state to history
+  const saveToHistory = () => {
+    const newState: HistoryState = {
+      seats: JSON.parse(JSON.stringify(seats)),
+      busElements: JSON.parse(JSON.stringify(busElements)),
+      freeSpaces: JSON.parse(JSON.stringify(freeSpaces)),
+    };
+    
+    setHistory(prev => {
+      // Remove any states after current index (when undoing and then making new changes)
+      const newHistory = prev.slice(0, historyIndex + 1);
+      return [...newHistory, newState];
+    });
+    setHistoryIndex(prev => prev + 1);
+    
+    // Limit history to 50 states
+    if (history.length > 50) {
+      setHistory(prev => prev.slice(1));
+      setHistoryIndex(prev => prev - 1);
+    }
+  };
+
+  // Undo function
+  const handleUndo = () => {
+    if (historyIndex > 0) {
+      const previousState = history[historyIndex - 1];
+      setSeats(previousState.seats);
+      setBusElements(previousState.busElements);
+      setFreeSpaces(previousState.freeSpaces);
+      setHistoryIndex(prev => prev - 1);
+    }
+  };
+
+  // Initialize history with initial state (only once on mount)
+  useEffect(() => {
+    if (history.length === 0 && historyIndex === -1) {
+      const initialState: HistoryState = {
+        seats: JSON.parse(JSON.stringify(seats)),
+        busElements: JSON.parse(JSON.stringify(busElements)),
+        freeSpaces: JSON.parse(JSON.stringify(freeSpaces)),
+      };
+      setHistory([initialState]);
+      setHistoryIndex(0);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only run once on mount
 
   useEffect(() => {
     onSeatsChange(seats);
@@ -171,57 +642,170 @@ export function SeatMapEditor({
     return rows.flat();
   }, [seats, selectedFloor, layoutMode]);
 
-  const handleZoomIn = () => {
-    setZoom((prev) => Math.min(prev + ZOOM_STEP, MAX_ZOOM));
-  };
+  // Zoom functions removed - no zoom needed
 
-  const handleZoomOut = () => {
-    setZoom((prev) => Math.max(prev - ZOOM_STEP, MIN_ZOOM));
-  };
+  // Pan removed - SVG always fits viewport, no need to pan
+  const handlePanStart = () => {};
+  const handlePanMove = () => {};
+  const handlePanEnd = () => {};
 
-  const handleZoomReset = () => {
-    setZoom(0.5);
-    setPan({ x: 0, y: 0 });
-  };
-
-  const handlePanStart = (e: React.MouseEvent) => {
-    if ((e.button === 1 || e.ctrlKey || e.metaKey) && !dragging && !draggingElement && !resizingElement) {
-      e.preventDefault();
-      setIsPanning(true);
-      setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
-    }
-  };
-
-  const handlePanMove = (e: React.MouseEvent) => {
-    if (!isPanning) return;
-    setPan({
-      x: e.clientX - panStart.x,
-      y: e.clientY - panStart.y,
-    });
-  };
-
-  const handlePanEnd = () => {
-    setIsPanning(false);
-  };
+  // Helper functions to convert between logical and physical coordinates
+  const getScaleX = () => canvasSize.width / CANVAS_WIDTH;
+  const getScaleY = () => canvasSize.height / CANVAS_HEIGHT;
+  
+  const logicalToPhysicalX = (logicalX: number) => logicalX * getScaleX();
+  const logicalToPhysicalY = (logicalY: number) => logicalY * getScaleY();
+  const logicalToPhysicalWidth = (logicalWidth: number) => logicalWidth * getScaleX();
+  const logicalToPhysicalHeight = (logicalHeight: number) => logicalHeight * getScaleY();
 
   // Helper function to get canvas coordinates from mouse event
+  // Canvas has fixed pixel size (canvasSize) that maps to logical size (CANVAS_WIDTH x CANVAS_HEIGHT)
   const getCanvasCoordinates = (e: React.MouseEvent): { x: number; y: number } => {
-    if (!canvasRef.current) return { x: 0, y: 0 };
+    if (!canvasRef.current || canvasSize.width === 0 || canvasSize.height === 0) return { x: 0, y: 0 };
     const rect = canvasRef.current.getBoundingClientRect();
-    // Coordinates relative to viewport
-    const viewportX = e.clientX - rect.left;
-    const viewportY = e.clientY - rect.top;
-    // Apply inverse transform: first subtract pan, then divide by zoom
-    // CSS transform is: translate(pan.x, pan.y) scale(zoom)
-    // Inverse: (viewport - pan) / zoom
-    const canvasX = (viewportX - pan.x) / zoom;
-    const canvasY = (viewportY - pan.y) / zoom;
+    
+    // Get mouse position relative to canvas element (top-left corner)
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    
+    // Convert rendered pixel coordinates to logical canvas coordinates (0-2400, 0-1600)
+    const canvasX = mouseX / getScaleX();
+    const canvasY = mouseY / getScaleY();
+    
     return { x: canvasX, y: canvasY };
   };
 
+  // Guide management functions
+  const addHorizontalGuide = (y: number) => {
+    const snappedY = snapToGrid(y);
+    if (!horizontalGuides.includes(snappedY)) {
+      setHorizontalGuides([...horizontalGuides, snappedY].sort((a, b) => a - b));
+    }
+  };
+
+  const addVerticalGuide = (x: number) => {
+    const snappedX = snapToGrid(x);
+    if (!verticalGuides.includes(snappedX)) {
+      setVerticalGuides([...verticalGuides, snappedX].sort((a, b) => a - b));
+    }
+  };
+
+  const removeHorizontalGuide = (y: number) => {
+    setHorizontalGuides(horizontalGuides.filter(guideY => guideY !== y));
+  };
+
+  const removeVerticalGuide = (x: number) => {
+    setVerticalGuides(verticalGuides.filter(guideX => guideX !== x));
+  };
+
+  const handleGuideClick = (e: React.MouseEvent) => {
+    if (addingGuide) {
+      const { x, y } = getCanvasCoordinates(e);
+      if (addingGuide === "horizontal") {
+        addHorizontalGuide(y);
+      } else if (addingGuide === "vertical") {
+        addVerticalGuide(x);
+      }
+      setAddingGuide(false);
+      e.stopPropagation();
+    }
+  };
+
+  // Multi-selection functions
+  const handleSelectionStart = (e: React.MouseEvent) => {
+    if (selectionMode && editMode === "seats" && !dragging && !editingSeatId) {
+      const { x, y } = getCanvasCoordinates(e);
+      setIsSelecting(true);
+      setSelectionBox({ start: { x, y }, end: { x, y } });
+      // Keep selection for keyboard movement - don't clear it
+      // Selection will be cleared when clicking on empty canvas
+    }
+  };
+
+  const handleSelectionMove = (e: React.MouseEvent) => {
+    if (isSelecting && selectionBox) {
+      const { x, y } = getCanvasCoordinates(e);
+      setSelectionBox({ ...selectionBox, end: { x, y } });
+      
+      // Update selected seats based on selection box
+      const minX = Math.min(selectionBox.start.x, x);
+      const maxX = Math.max(selectionBox.start.x, x);
+      const minY = Math.min(selectionBox.start.y, y);
+      const maxY = Math.max(selectionBox.start.y, y);
+      
+      const newSelected = new Set(selectedSeats);
+      const currentFloorSeats = seats.filter((s) => s.floor === selectedFloor);
+      currentFloorSeats.forEach(seat => {
+        const seatWidth = getSeatWidth(seat.type);
+        const seatHeight = SEAT_HEIGHT;
+        const seatCenterX = seat.x + seatWidth / 2;
+        const seatCenterY = seat.y + seatHeight / 2;
+        
+        if (seatCenterX >= minX && seatCenterX <= maxX && seatCenterY >= minY && seatCenterY <= maxY) {
+          newSelected.add(seat.id);
+        }
+      });
+      setSelectedSeats(newSelected);
+    }
+  };
+
+  const handleSelectionEnd = () => {
+    setIsSelecting(false);
+    setSelectionBox(null);
+  };
+
   const handleCanvasClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    // Handle guide adding
+    if (addingGuide) {
+      handleGuideClick(e);
+      return;
+    }
+
+    // Handle element creation in elements mode
+    if (editMode === "elements" && selectedElementType) {
+      if (!canvasRef.current || draggingElement || draggingFreeSpace || isPanning) return;
+      const { x, y } = getCanvasCoordinates(e);
+      
+      // Check if click is on an existing element
+      const clickedElement = busElements.find((el) => {
+        const elX = el.x;
+        const elY = el.y; // Element Y position
+        return (
+          x >= elX &&
+          x <= elX + el.width &&
+          y >= elY - el.height / 2 &&
+          y <= elY + el.height / 2 &&
+          el.floor === selectedFloor
+        );
+      });
+      
+      if (clickedElement) return;
+      
+      // Create new door element
+      const newElement: BusElement = {
+        id: `${selectedElementType}-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+        type: selectedElementType,
+        x: snapValue(x, horizontalGuides, verticalGuides, snapEnabled, true, false),
+        y: snapValue(y, horizontalGuides, verticalGuides, snapEnabled, true, true),
+        width: 64,
+        height: 80,
+        floor: selectedFloor,
+      };
+      
+      setBusElements([...busElements, newElement]);
+      setSelectedElementType(null); // Reset selection after creating
+      saveToHistory();
+      return;
+    }
+    
     // Only handle clicks for seat creation in seats mode
-    if (!canvasRef.current || dragging || draggingElement || editingSeatId || isPanning || editMode !== "seats") return;
+    if (!canvasRef.current || dragging || draggingElement || draggingFreeSpace || editingSeatId || isPanning || editMode !== "seats") return;
+
+    // If free_space type, handle it with mouse down/up
+    if (selectedSeatType === "free_space") {
+      handleFreeSpaceMouseDown(e);
+      return;
+    }
 
     const { x: clickX, y: clickY } = getCanvasCoordinates(e);
 
@@ -238,39 +822,47 @@ export function SeatMapEditor({
       );
     });
 
-    if (clickedSeat) return;
+    // Handle multi-selection
+    if (selectionMode && clickedSeat) {
+      const newSelected = new Set(selectedSeats);
+      if (e.ctrlKey || e.metaKey) {
+        if (newSelected.has(clickedSeat.id)) {
+          newSelected.delete(clickedSeat.id);
+        } else {
+          newSelected.add(clickedSeat.id);
+        }
+      } else {
+        newSelected.clear();
+        newSelected.add(clickedSeat.id);
+      }
+      setSelectedSeats(newSelected);
+      return;
+    }
+
+    // If clicked on a seat and not in selection mode, select it for keyboard movement
+    if (clickedSeat && !selectionMode) {
+      setSelectedSeats(new Set([clickedSeat.id]));
+      return;
+    }
+
+    // Clear selection when clicking on empty canvas
+    if (!clickedSeat && !selectionMode) {
+      setSelectedSeats(new Set());
+    }
 
     // Create new seat with snap
     let x = clickX - SEAT_WIDTH / 2;
     let y = clickY - SEAT_HEIGHT / 2;
 
-    if (snapEnabled) {
-      x = snapToGrid(x);
-      y = snapToGrid(y);
-    }
+    // Use enhanced snap function
+    x = snapValue(x, horizontalGuides, verticalGuides, snapEnabled, true, false);
+    y = snapValue(y, horizontalGuides, verticalGuides, snapEnabled, true, true);
 
-    // Calculate bus bounds (centered in canvas, horizontal orientation)
-    const busLeft = (CANVAS_WIDTH - busLength) / 2;
-    // For top deck (floor 2): position above center
-    // For bottom deck (floor 1): position below center (or at center if no top deck)
-    const baseBusTop = seats.some(s => s.floor === 2) 
-      ? (CANVAS_HEIGHT - busWidth * 2 - FLOOR_OFFSET) / 2
-      : (CANVAS_HEIGHT - busWidth) / 2;
-    
-    const floorOffset = selectedFloor === 2 ? 0 : (seats.some(s => s.floor === 2) ? busWidth + FLOOR_OFFSET : 0);
-    const busTop = baseBusTop + floorOffset;
-    const busRight = busLeft + busLength;
-    const busBottom = busTop + busWidth;
-    const adjustedBusTop = busTop;
-    const adjustedBusBottom = busBottom;
-
-    // Constrain seat placement within bus bounds (with margins for labels and markers)
-    const marginLeft = 50; // Space for FRONT label and markers
-    const marginRight = 50; // Space for BACK label and markers
-    const marginTop = 40; // Space for deck label
-    const marginBottom = 40; // Space for deck label
-    const constrainedX = Math.max(busLeft + marginLeft, Math.min(x, busRight - getSeatWidth(selectedSeatType) - marginRight));
-    const constrainedY = Math.max(adjustedBusTop + marginTop, Math.min(y, adjustedBusBottom - SEAT_HEIGHT - marginBottom));
+    // Use full canvas - no bus bounds constraints
+    // Allow placing seats anywhere on the canvas
+    const margin = 20; // Small margin from edges
+    const constrainedX = Math.max(margin, Math.min(x, CANVAS_WIDTH - getSeatWidth(selectedSeatType) - margin));
+    const constrainedY = Math.max(margin, Math.min(y, CANVAS_HEIGHT - SEAT_HEIGHT - margin));
 
     const newSeat: Seat = {
       id: `seat-${Date.now()}-${Math.random().toString(36).substring(7)}`,
@@ -284,77 +876,364 @@ export function SeatMapEditor({
     };
 
     setSeats([...seats, newSeat]);
+    saveToHistory();
   };
 
   const handleSeatDragStart = (seatId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (editingSeatId || isPanning) return;
+    e.preventDefault();
+    if (editingSeatId) return;
 
     const seat = seats.find((s) => s.id === seatId);
     if (!seat) return;
 
     const { x: mouseX, y: mouseY } = getCanvasCoordinates(e);
-    setDragging(seatId);
-    setDragOffset({
-      x: mouseX - seat.x,
-      y: mouseY - seat.y,
-    });
+
+    // If in selection mode and this seat is selected, prepare for multi-drag
+    if (selectionMode && selectedSeats.has(seatId) && selectedSeats.size > 1) {
+      setDragging(seatId);
+      setMultiDragOffset({
+        x: mouseX - seat.x,
+        y: mouseY - seat.y,
+      });
+    } else {
+      // Single seat drag
+      setDragging(seatId);
+      setDragOffset({
+        x: mouseX - seat.x,
+        y: mouseY - seat.y,
+      });
+      // Keep selection for keyboard movement, only clear if explicitly clicking elsewhere
+      // Don't clear selection here - let it be cleared by canvas click handler
+    }
   };
 
-  const handleSeatDrag = (e: React.MouseEvent) => {
-    if (!dragging || !canvasRef.current || editingSeatId || isPanning) return;
+  const handleSeatDrag = (e: MouseEvent | React.MouseEvent) => {
+    if (!dragging || !canvasRef.current || editingSeatId) return;
 
-    const { x: mouseX, y: mouseY } = getCanvasCoordinates(e);
-    let x = mouseX - dragOffset.x;
-    let y = mouseY - dragOffset.y;
-
-    if (snapEnabled) {
-      x = snapToGrid(x);
-      y = snapToGrid(y);
+    // Handle both React.MouseEvent and native MouseEvent
+    let clientX: number, clientY: number;
+    if ('nativeEvent' in e) {
+      clientX = e.clientX;
+      clientY = e.clientY;
+    } else {
+      clientX = e.clientX;
+      clientY = e.clientY;
     }
 
-    // Calculate bus bounds for the seat's floor (horizontal orientation)
-    const busLeft = (CANVAS_WIDTH - busLength) / 2;
-    const baseBusTop = seats.some(s => s.floor === 2) 
-      ? (CANVAS_HEIGHT - busWidth * 2 - FLOOR_OFFSET) / 2
-      : (CANVAS_HEIGHT - busWidth) / 2;
-    
-    const seat = seats.find(s => s.id === dragging);
-    const floorOffset = seat?.floor === 2 ? 0 : (seats.some(s => s.floor === 2) ? busWidth + FLOOR_OFFSET : 0);
-    const busTop = baseBusTop + floorOffset;
-    const busRight = busLeft + busLength;
-    const busBottom = busTop + busWidth;
-    const adjustedBusTop = busTop;
-    const adjustedBusBottom = busBottom;
+    const rect = canvasRef.current.getBoundingClientRect();
+    const mouseX = (clientX - rect.left) / getScaleX();
+    const mouseY = (clientY - rect.top) / getScaleY();
 
-    // Constrain seat placement within bus bounds (with margins for labels and markers)
-    const marginLeft = 50;
-    const marginRight = 50;
-    const marginTop = 40;
-    const marginBottom = 40;
+    const draggedSeat = seats.find(s => s.id === dragging);
+    if (!draggedSeat) return;
+
+    // Check if we're dragging multiple seats
+    const isMultiDrag = selectionMode && selectedSeats.has(dragging) && multiDragOffset;
     
-    setSeats((prev) =>
-      prev.map((seat) =>
-        seat.id === dragging
-          ? {
+    if (isMultiDrag && multiDragOffset) {
+      // Calculate offset for all selected seats
+      const baseX = mouseX - multiDragOffset.x;
+      const baseY = mouseY - multiDragOffset.y;
+      const deltaX = baseX - draggedSeat.x;
+      const deltaY = baseY - draggedSeat.y;
+
+      // Move all selected seats
+      setSeats((prev) =>
+        prev.map((seat) => {
+          if (selectedSeats.has(seat.id) && seat.floor === selectedFloor) {
+            let newX = seat.x + deltaX;
+            let newY = seat.y + deltaY;
+
+            // Apply snap to all seats
+            newX = snapValue(newX, horizontalGuides, verticalGuides, snapEnabled, true, false);
+            newY = snapValue(newY, horizontalGuides, verticalGuides, snapEnabled, true, true);
+
+            const margin = 20;
+            return {
               ...seat,
-              x: Math.max(busLeft + marginLeft, Math.min(x, busRight - getSeatWidth(seat.type) - marginRight)),
-              y: Math.max(adjustedBusTop + marginTop, Math.min(y, adjustedBusBottom - SEAT_HEIGHT - marginBottom)),
-            }
-          : seat
-      )
-    );
+              x: Math.max(margin, Math.min(newX, CANVAS_WIDTH - getSeatWidth(seat.type) - margin)),
+              y: Math.max(margin, Math.min(newY, CANVAS_HEIGHT - SEAT_HEIGHT - margin)),
+            };
+          }
+          return seat;
+        })
+      );
+    } else {
+      // Single seat drag
+      let x = mouseX - dragOffset.x;
+      let y = mouseY - dragOffset.y;
+
+      // Use enhanced snap function
+      x = snapValue(x, horizontalGuides, verticalGuides, snapEnabled, true, false);
+      y = snapValue(y, horizontalGuides, verticalGuides, snapEnabled, true, true);
+
+      // Constrain seat placement within canvas bounds
+      const margin = 20;
+      
+      setSeats((prev) =>
+        prev.map((seat) =>
+          seat.id === dragging
+            ? {
+                ...seat,
+                x: Math.max(margin, Math.min(x, CANVAS_WIDTH - getSeatWidth(seat.type) - margin)),
+                y: Math.max(margin, Math.min(y, CANVAS_HEIGHT - SEAT_HEIGHT - margin)),
+              }
+            : seat
+        )
+      );
+    }
   };
 
   const handleSeatDragEnd = () => {
     setDragging(null);
+    setMultiDragOffset(null);
+    setDragOffset({ x: 0, y: 0 });
   };
+
+  // Global mouse event handlers for dragging
+  useEffect(() => {
+    if (!dragging) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!canvasRef.current || !canvasSize.width || !canvasSize.height) return;
+      const rect = canvasRef.current.getBoundingClientRect();
+      const getScaleX = () => canvasSize.width / CANVAS_WIDTH;
+      const getScaleY = () => canvasSize.height / CANVAS_HEIGHT;
+      const mouseX = (e.clientX - rect.left) / getScaleX();
+      const mouseY = (e.clientY - rect.top) / getScaleY();
+
+      const draggedSeat = seats.find(s => s.id === dragging);
+      if (!draggedSeat) return;
+
+      // Check if we're dragging multiple seats
+      const isMultiDrag = selectionMode && selectedSeats.has(dragging) && multiDragOffset;
+      
+      if (isMultiDrag && multiDragOffset) {
+        // Calculate offset for all selected seats
+        const baseX = mouseX - multiDragOffset.x;
+        const baseY = mouseY - multiDragOffset.y;
+        const deltaX = baseX - draggedSeat.x;
+        const deltaY = baseY - draggedSeat.y;
+
+        // Move all selected seats
+        setSeats((prev) =>
+          prev.map((seat) => {
+            if (selectedSeats.has(seat.id) && seat.floor === selectedFloor) {
+              let newX = seat.x + deltaX;
+              let newY = seat.y + deltaY;
+
+              // Apply snap to all seats
+              newX = snapValue(newX, horizontalGuides, verticalGuides, snapEnabled, true, false);
+              newY = snapValue(newY, horizontalGuides, verticalGuides, snapEnabled, true, true);
+
+              const margin = 20;
+              return {
+                ...seat,
+                x: Math.max(margin, Math.min(newX, CANVAS_WIDTH - getSeatWidth(seat.type) - margin)),
+                y: Math.max(margin, Math.min(newY, CANVAS_HEIGHT - SEAT_HEIGHT - margin)),
+              };
+            }
+            return seat;
+          })
+        );
+      } else {
+        // Single seat drag
+        let x = mouseX - dragOffset.x;
+        let y = mouseY - dragOffset.y;
+
+        // Use enhanced snap function
+        x = snapValue(x, horizontalGuides, verticalGuides, snapEnabled, true, false);
+        y = snapValue(y, horizontalGuides, verticalGuides, snapEnabled, true, true);
+
+        // Constrain seat placement within canvas bounds
+        const margin = 20;
+        
+        setSeats((prev) =>
+          prev.map((seat) =>
+            seat.id === dragging
+              ? {
+                  ...seat,
+                  x: Math.max(margin, Math.min(x, CANVAS_WIDTH - getSeatWidth(seat.type) - margin)),
+                  y: Math.max(margin, Math.min(y, CANVAS_HEIGHT - SEAT_HEIGHT - margin)),
+                }
+              : seat
+          )
+        );
+      }
+    };
+
+    const handleMouseUp = () => {
+      if (dragging) {
+        saveToHistory();
+      }
+      handleSeatDragEnd();
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [dragging, dragOffset, multiDragOffset, selectedSeats, selectionMode, horizontalGuides, verticalGuides, snapEnabled, seats, selectedFloor, canvasSize]);
+
+  // Global mouse event handlers for element dragging
+  useEffect(() => {
+    if (!draggingElement || !canvasRef.current || !canvasSize.width || !canvasSize.height) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!canvasRef.current || !canvasSize.width || !canvasSize.height) return;
+      const rect = canvasRef.current.getBoundingClientRect();
+      const getScaleX = () => canvasSize.width / CANVAS_WIDTH;
+      const getScaleY = () => canvasSize.height / CANVAS_HEIGHT;
+      const mouseX = (e.clientX - rect.left) / getScaleX();
+      const mouseY = (e.clientY - rect.top) / getScaleY();
+
+      const element = busElements.find(el => el.id === draggingElement);
+      if (!element) return;
+
+      let x = mouseX - dragOffset.x;
+      let y = mouseY - dragOffset.y;
+
+      // Use enhanced snap function with guides
+      if (snapEnabled) {
+        x = snapValue(x, horizontalGuides, verticalGuides, snapEnabled, true, false);
+        y = snapValue(y, horizontalGuides, verticalGuides, snapEnabled, true, true);
+      }
+
+      // Get element base dimensions (without multipliers for calculations)
+      const baseWidth = element.width;
+      const baseHeight = element.height;
+
+      // Constrain element placement within canvas bounds
+      const margin = 20;
+      let constrainedY = y;
+      if (element.type === "frontDoor" || element.type === "rearDoor") {
+        // Doors are centered vertically
+        const minY = baseHeight / 2 + margin;
+        const maxY = CANVAS_HEIGHT - baseHeight / 2 - margin;
+        constrainedY = Math.max(minY, Math.min(y, maxY));
+      } else {
+        // Regular elements
+        constrainedY = Math.max(margin, Math.min(y, CANVAS_HEIGHT - baseHeight - margin));
+      }
+
+      // Constrain X position
+      const constrainedX = Math.max(margin, Math.min(x, CANVAS_WIDTH - baseWidth - margin));
+
+      setBusElements((prev) =>
+        prev.map((el) =>
+          el.id === draggingElement
+            ? {
+                ...el,
+                x: constrainedX,
+                y: constrainedY,
+              }
+            : el
+        )
+      );
+    };
+
+    const handleMouseUp = () => {
+      if (draggingElement) {
+        saveToHistory();
+      }
+      setDraggingElement(null);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [draggingElement, dragOffset, horizontalGuides, verticalGuides, snapEnabled, busElements, selectedFloor, canvasSize]);
+
+  // Global mouse event handlers for element resizing
+  useEffect(() => {
+    if (!resizingElement || !canvasRef.current || !canvasSize.width || !canvasSize.height) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!canvasRef.current || !canvasSize.width || !canvasSize.height) return;
+      const rect = canvasRef.current.getBoundingClientRect();
+      const getScaleX = () => canvasSize.width / CANVAS_WIDTH;
+      const getScaleY = () => canvasSize.height / CANVAS_HEIGHT;
+      const currentX = (e.clientX - rect.left) / getScaleX();
+      const currentY = (e.clientY - rect.top) / getScaleY();
+
+      const element = busElements.find(el => el.id === resizingElement);
+      if (!element) return;
+
+      // Calculate delta from resize start position
+      const deltaX = currentX - resizeStart.x;
+      const deltaY = currentY - resizeStart.y;
+
+      // Calculate new dimensions (maintain top-left corner position)
+      let newWidth = Math.max(20, resizeStart.width + deltaX);
+      let newHeight = Math.max(20, resizeStart.height + deltaY);
+
+      // Use enhanced snap function with guides
+      if (snapEnabled) {
+        newWidth = snapValue(newWidth, horizontalGuides, verticalGuides, snapEnabled, true, false);
+        newHeight = snapValue(newHeight, horizontalGuides, verticalGuides, snapEnabled, true, true);
+      }
+
+      // Constrain resize within canvas bounds
+      const margin = 20;
+      if (element.type === "frontDoor" || element.type === "rearDoor") {
+        // Doors are centered vertically
+        const doorTop = element.y - newHeight / 2;
+        const doorBottom = element.y + newHeight / 2;
+        if (doorTop < margin) {
+          newHeight = (element.y - margin) * 2;
+        }
+        if (doorBottom > CANVAS_HEIGHT - margin) {
+          newHeight = (CANVAS_HEIGHT - margin - element.y) * 2;
+        }
+      } else {
+        // Regular elements
+        if (element.x + newWidth > CANVAS_WIDTH - margin) {
+          newWidth = CANVAS_WIDTH - margin - element.x;
+        }
+        if (element.y + newHeight > CANVAS_HEIGHT - margin) {
+          newHeight = CANVAS_HEIGHT - margin - element.y;
+        }
+      }
+
+      // Ensure minimum size
+      newWidth = Math.max(20, newWidth);
+      newHeight = Math.max(20, newHeight);
+
+      setBusElements((prev) =>
+        prev.map((el) =>
+          el.id === resizingElement
+            ? { ...el, width: newWidth, height: newHeight }
+            : el
+        )
+      );
+    };
+
+    const handleMouseUp = () => {
+      setResizingElement(null);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [resizingElement, resizeStart, horizontalGuides, verticalGuides, snapEnabled, busElements, selectedFloor, canvasSize]);
 
   // Element drag handlers
   const handleElementDragStart = (elementId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
-    if (editMode !== "elements" || editingSeatId || isPanning || resizingElement) return;
+    if (editMode !== "elements" || editingSeatId || resizingElement) return;
 
     const element = busElements.find((el) => el.id === elementId);
     if (!element || element.floor !== selectedFloor) return;
@@ -368,72 +1247,14 @@ export function SeatMapEditor({
     });
   };
 
-  const handleElementDrag = (e: React.MouseEvent) => {
-    if (!draggingElement || !canvasRef.current || editingSeatId || isPanning || resizingElement) return;
-
-    const { x: mouseX, y: mouseY } = getCanvasCoordinates(e);
-    let x = mouseX - dragOffset.x;
-    let y = mouseY - dragOffset.y;
-
-    if (snapEnabled) {
-      x = snapToGrid(x);
-      y = snapToGrid(y);
-    }
-
-    // Calculate bus bounds
-    const busLeft = (CANVAS_WIDTH - busLength) / 2;
-    const baseBusTop = seats.some(s => s.floor === 2) 
-      ? (CANVAS_HEIGHT - busWidth * 2 - FLOOR_OFFSET) / 2
-      : (CANVAS_HEIGHT - busWidth) / 2;
-    const floorOffset = selectedFloor === 2 ? 0 : (seats.some(s => s.floor === 2) ? busWidth + FLOOR_OFFSET : 0);
-    const busTop = baseBusTop + floorOffset;
-    const busRight = busLeft + busLength;
-    const busBottom = busTop + busWidth;
-
-    const element = busElements.find(el => el.id === draggingElement);
-    if (!element) return;
-
-    // Get element base dimensions (without multipliers for calculations)
-    const baseWidth = element.width;
-    const baseHeight = element.height;
-
-    // For doors, adjust Y calculation because they use translateY(-50%)
-    // The stored Y is the center position, but we need to constrain the top edge
-    let constrainedY = y;
-    if (element.type === "frontDoor" || element.type === "rearDoor") {
-      // Doors are centered vertically, so we need to account for half height
-      // Allow more freedom - only constrain to keep door fully visible
-      const minY = busTop + baseHeight / 2;
-      const maxY = busBottom - baseHeight / 2;
-      constrainedY = Math.max(minY, Math.min(y, maxY));
-    } else {
-      // Regular elements (driver, stairs) - allow free movement within bus bounds
-      // Only constrain to keep element fully visible
-      constrainedY = Math.max(busTop, Math.min(y, busBottom - baseHeight));
-    }
-
-    // Constrain X position - allow free movement within bus bounds
-    const constrainedX = Math.max(busLeft, Math.min(x, busRight - baseWidth));
-
-    setBusElements((prev) =>
-      prev.map((el) =>
-        el.id === draggingElement
-          ? {
-              ...el,
-              x: constrainedX,
-              y: constrainedY,
-            }
-          : el
-      )
-    );
-  };
+  // handleElementDrag is now handled globally via useEffect above
 
   const handleElementDragEnd = () => {
     setDraggingElement(null);
   };
 
-  // Element resize handlers
-  const handleElementResizeStart = (elementId: string, e: React.MouseEvent) => {
+  // Element resize handlers with multi-directional resize
+  const handleElementResizeStart = (elementId: string, handle: string, e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
     if (editMode !== "elements" || draggingElement) return;
@@ -443,6 +1264,7 @@ export function SeatMapEditor({
 
     const { x: mouseX, y: mouseY } = getCanvasCoordinates(e);
     setResizingElement(elementId);
+    setResizeHandle(handle);
     setSelectedElement(elementId);
     setResizeStart({
       x: mouseX,
@@ -452,71 +1274,7 @@ export function SeatMapEditor({
     });
   };
 
-  const handleElementResize = (e: React.MouseEvent) => {
-    if (!resizingElement || !canvasRef.current || isPanning) return;
-
-    const { x: currentX, y: currentY } = getCanvasCoordinates(e);
-
-    const element = busElements.find(el => el.id === resizingElement);
-    if (!element) return;
-
-    // Calculate delta from resize start position
-    const deltaX = currentX - resizeStart.x;
-    const deltaY = currentY - resizeStart.y;
-
-    // Calculate new dimensions (maintain top-left corner position)
-    let newWidth = Math.max(20, resizeStart.width + deltaX);
-    let newHeight = Math.max(20, resizeStart.height + deltaY);
-
-    if (snapEnabled) {
-      newWidth = snapToGrid(newWidth);
-      newHeight = snapToGrid(newHeight);
-    }
-
-    // Calculate bus bounds
-    const busLeft = (CANVAS_WIDTH - busLength) / 2;
-    const baseBusTop = seats.some(s => s.floor === 2) 
-      ? (CANVAS_HEIGHT - busWidth * 2 - FLOOR_OFFSET) / 2
-      : (CANVAS_HEIGHT - busWidth) / 2;
-    const floorOffset = selectedFloor === 2 ? 0 : (seats.some(s => s.floor === 2) ? busWidth + FLOOR_OFFSET : 0);
-    const busTop = baseBusTop + floorOffset;
-    const busRight = busLeft + busLength;
-    const busBottom = busTop + busWidth;
-
-    // Constrain resize within bus bounds (keep element position fixed, only resize)
-    // For doors, need to consider translateY(-50%)
-    if (element.type === "frontDoor" || element.type === "rearDoor") {
-      // Doors are centered, so we need to check both top and bottom edges
-      const doorTop = element.y - newHeight / 2;
-      const doorBottom = element.y + newHeight / 2;
-      if (doorTop < busTop + 2) {
-        newHeight = (element.y - busTop - 2) * 2;
-      }
-      if (doorBottom > busBottom - 2) {
-        newHeight = (busBottom - 2 - element.y) * 2;
-      }
-    } else {
-      // Regular elements - constrain normally
-      if (element.x + newWidth > busRight - 2) {
-        newWidth = busRight - element.x - 2;
-      }
-      if (element.y + newHeight > busBottom - 2) {
-        newHeight = busBottom - element.y - 2;
-      }
-    }
-
-    // Ensure minimum size
-    newWidth = Math.max(20, newWidth);
-    newHeight = Math.max(20, newHeight);
-
-    setBusElements((prev) =>
-      prev.map((el) =>
-        el.id === resizingElement
-          ? { ...el, width: newWidth, height: newHeight }
-          : el
-      )
-    );
-  };
+  // handleElementResize is now handled globally via useEffect above
 
   const handleElementResizeEnd = () => {
     setResizingElement(null);
@@ -570,36 +1328,38 @@ export function SeatMapEditor({
 
   const getSeatWidth = (type: SeatType): number => {
     const baseWidths: Record<SeatType, number> = {
-      double: 48,
-      aisle: 24,
-      stair: 50,
-      bathroom: 40,
+      double: 268, // 134 * 2 = 268
+      aisle: 134, // 67 * 2 = 134
+      stair: 280, // 140 * 2 = 280
+      bathroom: 224, // 112 * 2 = 224
       single: SEAT_WIDTH,
       disabled: SEAT_WIDTH,
       extra_space: SEAT_WIDTH,
+      free_space: 560, // 280 * 2 = 560
     };
     const baseWidth = baseWidths[type] || SEAT_WIDTH;
     const multiplier = type === "stair" ? sizeMultipliers.stairs : sizeMultipliers.seats;
     return baseWidth * multiplier;
   };
 
-  const getSeatSize = (type: SeatType): { width: string; height: string } => {
+  const getSeatSize = (type: SeatType): { width: number; height: number } => {
     const baseSizes: Record<SeatType, { w: number; h: number }> = {
-      double: { w: 48, h: 24 },
-      aisle: { w: 24, h: 24 },
-      stair: { w: 50, h: 32 },
-      bathroom: { w: 40, h: 32 },
+      double: { w: 268, h: 134 }, // 134*2, 67*2
+      aisle: { w: 134, h: 134 }, // 67*2, 67*2
+      stair: { w: 280, h: 180 }, // 140*2, 90*2
+      bathroom: { w: 224, h: 180 }, // 112*2, 90*2
       single: { w: SEAT_WIDTH, h: SEAT_HEIGHT },
       disabled: { w: SEAT_WIDTH, h: SEAT_HEIGHT },
       extra_space: { w: SEAT_WIDTH, h: SEAT_HEIGHT },
+      free_space: { w: 560, h: 336 }, // 280*2, 168*2
     };
     
     const base = baseSizes[type] || baseSizes.single;
     const multiplier = type === "stair" ? sizeMultipliers.stairs : sizeMultipliers.seats;
     
     return {
-      width: `${base.w * multiplier}px`,
-      height: `${base.h * multiplier}px`,
+      width: base.w * multiplier,
+      height: base.h * multiplier,
     };
   };
 
@@ -611,6 +1371,7 @@ export function SeatMapEditor({
     if (type === "extra_space") return "bg-blue-500";
     if (type === "stair") return "bg-orange-500"; // Orange for stairs to match diagram
     if (type === "bathroom") return "bg-cyan-400"; // Cyan for bathroom
+    if (type === "free_space") return "bg-transparent border-2 border-dashed border-gray-400"; // Transparent with dashed border
     return floor === 1 ? "bg-blue-600" : "bg-blue-700";
   };
 
@@ -629,6 +1390,7 @@ export function SeatMapEditor({
     extra_space: "Espacio Extra",
     stair: "Escalera",
     bathroom: "Baño",
+    free_space: "Espacio Libre",
   };
 
   const seatsForCurrentFloor = seats.filter((s) => s.floor === selectedFloor);
@@ -641,20 +1403,12 @@ export function SeatMapEditor({
           linear-gradient(to right, rgba(0, 0, 0, 0.1) 1px, transparent 1px),
           linear-gradient(to bottom, rgba(0, 0, 0, 0.1) 1px, transparent 1px)
         `,
-        backgroundSize: `${SNAP_GRID_SIZE * zoom}px ${SNAP_GRID_SIZE * zoom}px`,
-        backgroundPosition: `${pan.x}px ${pan.y}px`,
+        backgroundSize: `${SNAP_GRID_SIZE}px ${SNAP_GRID_SIZE}px`,
+        backgroundPosition: `0px 0px`,
       }
     : {};
 
-  // Update rear door position when bus length changes
-  useEffect(() => {
-    setBusElements(prev => prev.map(el => {
-      if (el.type === "rearDoor" && el.floor === selectedFloor) {
-        return { ...el, x: busLength - el.width - 2 };
-      }
-      return el;
-    }));
-  }, [busLength, selectedFloor]);
+  // No need to update door positions - elements are free to move
 
   return (
     <div className={`space-y-4 ${className}`}>
@@ -677,84 +1431,35 @@ export function SeatMapEditor({
         <div className="bg-card border border-border rounded-lg p-4 space-y-4">
           <h4 className="font-semibold text-lg mb-4">Personalizar Dimensiones y Elementos del Bus</h4>
           
-          {/* Bus Dimensions */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-2">
-                Longitud del Bus (px): {busLength}
-              </label>
-              <input
-                type="range"
-                min="1000"
-                max="3000"
-                step="50"
-                value={busLength}
-                onChange={(e) => setBusLength(Number(e.target.value))}
-                className="w-full"
-              />
-              <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                <span>1000px</span>
-                <span>3000px</span>
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-2">
-                Ancho del Bus (px): {busWidth}
-              </label>
-              <input
-                type="range"
-                min="400"
-                max="1000"
-                step="50"
-                value={busWidth}
-                onChange={(e) => setBusWidth(Number(e.target.value))}
-                className="w-full"
-              />
-              <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                <span>400px</span>
-                <span>1000px</span>
-              </div>
+          {/* Canvas Size */}
+          <div>
+            <label className="block text-sm font-medium mb-2">
+              Tamaño del Canvas: {canvasScale}%
+            </label>
+            <input
+              type="range"
+              min="50"
+              max="200"
+              step="5"
+              value={canvasScale}
+              onChange={(e) => setCanvasScale(Number(e.target.value))}
+              className="w-full"
+            />
+            <div className="flex justify-between text-xs text-muted-foreground mt-1">
+              <span>50%</span>
+              <span>100%</span>
+              <span>200%</span>
             </div>
           </div>
 
-          {/* Size Multipliers by Group */}
+          {/* Size Multipliers - Simple Menu */}
           <div className="border-t border-border pt-4">
-            <h5 className="font-semibold mb-3">Tamaño de Elementos por Grupo</h5>
-            <div className="space-y-4">
-              {/* Driver Size */}
-              <div>
-                <label className="block text-sm font-medium mb-2">
-                  Conductor: {Math.round(sizeMultipliers.driver * 100)}%
-                </label>
-                <input
-                  type="range"
-                  min="0.5"
-                  max="2.0"
-                  step="0.1"
-                  value={sizeMultipliers.driver}
-                  onChange={(e) => {
-                    const multiplier = Number(e.target.value);
-                    setSizeMultipliers(prev => ({ ...prev, driver: multiplier }));
-                    // Update all driver elements
-                    setBusElements(prev => prev.map(el => {
-                      if (el.type === "driver") {
-                        return {
-                          ...el,
-                          width: 96 * multiplier,
-                          height: 64 * multiplier,
-                        };
-                      }
-                      return el;
-                    }));
-                  }}
-                  className="w-full"
-                />
-              </div>
-
+            <h5 className="font-semibold mb-3">Tamaño de Iconos</h5>
+            <div className="grid grid-cols-3 gap-4">
               {/* Doors Size */}
               <div>
                 <label className="block text-sm font-medium mb-2">
-                  Puertas (Entrada/Salida): {Math.round(sizeMultipliers.doors * 100)}%
+                  Puertas: {Math.round(sizeMultipliers.doors * 100)}%
                 </label>
                 <input
                   type="range"
@@ -765,7 +1470,6 @@ export function SeatMapEditor({
                   onChange={(e) => {
                     const multiplier = Number(e.target.value);
                     setSizeMultipliers(prev => ({ ...prev, doors: multiplier }));
-                    // Update all door elements
                     setBusElements(prev => prev.map(el => {
                       if (el.type === "frontDoor" || el.type === "rearDoor") {
                         return {
@@ -795,16 +1499,6 @@ export function SeatMapEditor({
                   onChange={(e) => {
                     const multiplier = Number(e.target.value);
                     setSizeMultipliers(prev => ({ ...prev, stairs: multiplier }));
-                    // Update all stair seats
-                    setSeats(prev => prev.map(seat => {
-                      if (seat.type === "stair") {
-                        return {
-                          ...seat,
-                          // Keep position but scale size visually
-                        };
-                      }
-                      return seat;
-                    }));
                   }}
                   className="w-full"
                 />
@@ -824,7 +1518,6 @@ export function SeatMapEditor({
                   onChange={(e) => {
                     const multiplier = Number(e.target.value);
                     setSizeMultipliers(prev => ({ ...prev, seats: multiplier }));
-                    // Seats size is handled in getSeatSize function
                   }}
                   className="w-full"
                 />
@@ -834,7 +1527,7 @@ export function SeatMapEditor({
 
           <div className="border-t border-border pt-4">
             <p className="text-sm text-muted-foreground">
-              💡 <strong>Tip:</strong> Usa el botón &quot;Modo Elementos&quot; en el toolbar para editar conductor y puertas directamente en el canvas. 
+              💡 <strong>Tip:</strong> Usa el botón &quot;Modo Elementos&quot; en el toolbar para editar puertas y espacios libres directamente en el canvas. 
               Arrastra para mover y usa la esquina inferior derecha para redimensionar.
             </p>
           </div>
@@ -843,6 +1536,21 @@ export function SeatMapEditor({
 
       {/* Toolbar */}
       <div className="flex items-center gap-4 p-4 bg-card border border-border rounded-lg flex-wrap">
+        {/* Undo Button */}
+        <button
+          onClick={handleUndo}
+          disabled={historyIndex <= 0}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
+            historyIndex <= 0
+              ? "bg-muted text-muted-foreground cursor-not-allowed"
+              : "bg-muted hover:bg-muted/80"
+          }`}
+          title="Deshacer (Ctrl+Z)"
+        >
+          <Undo2 className="w-4 h-4" />
+          Deshacer
+        </button>
+        
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium">Modo:</span>
           <button
@@ -889,51 +1597,56 @@ export function SeatMapEditor({
             Piso 2
           </button>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium">Tipo:</span>
-          {(["single", "double", "aisle", "disabled", "extra_space", "stair", "bathroom"] as SeatType[]).map((type) => (
+        {editMode === "seats" && (
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium">Tipo:</span>
+            {(["single", "double", "aisle", "disabled", "extra_space", "stair", "bathroom", "free_space"] as SeatType[]).map((type) => (
+              <button
+                key={type}
+                onClick={() => setSelectedSeatType(type)}
+                className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors flex items-center gap-1 ${
+                  selectedSeatType === type
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted hover:bg-muted/80"
+                }`}
+              >
+                {getSeatIcon(type)}
+                {seatTypeLabels[type]}
+              </button>
+            ))}
+          </div>
+        )}
+        {editMode === "elements" && (
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium">Elementos:</span>
             <button
-              key={type}
-              onClick={() => setSelectedSeatType(type)}
-              className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors flex items-center gap-1 ${
-                selectedSeatType === type
+              onClick={() => {
+                setSelectedElementType(selectedElementType === "frontDoor" ? null : "frontDoor");
+                setSelectedElement(null);
+              }}
+              className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+                selectedElementType === "frontDoor"
                   ? "bg-primary text-primary-foreground"
                   : "bg-muted hover:bg-muted/80"
               }`}
             >
-              {getSeatIcon(type)}
-              {seatTypeLabels[type]}
+              Entrada
             </button>
-          ))}
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleZoomOut}
-            disabled={zoom <= MIN_ZOOM}
-            className="px-3 py-2 rounded-lg text-sm font-medium transition-colors bg-muted hover:bg-muted/80 disabled:opacity-50 disabled:cursor-not-allowed"
-            title="Zoom Out"
-          >
-            <ZoomOut className="w-4 h-4" />
-          </button>
-          <span className="text-sm font-medium min-w-[60px] text-center">
-            {Math.round(zoom * 100)}%
-          </span>
-          <button
-            onClick={handleZoomIn}
-            disabled={zoom >= MAX_ZOOM}
-            className="px-3 py-2 rounded-lg text-sm font-medium transition-colors bg-muted hover:bg-muted/80 disabled:opacity-50 disabled:cursor-not-allowed"
-            title="Zoom In"
-          >
-            <ZoomIn className="w-4 h-4" />
-          </button>
-          <button
-            onClick={handleZoomReset}
-            className="px-3 py-2 rounded-lg text-sm font-medium transition-colors bg-muted hover:bg-muted/80"
-            title="Reset Zoom"
-          >
-            <RotateCcw className="w-4 h-4" />
-          </button>
-        </div>
+            <button
+              onClick={() => {
+                setSelectedElementType(selectedElementType === "rearDoor" ? null : "rearDoor");
+                setSelectedElement(null);
+              }}
+              className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+                selectedElementType === "rearDoor"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted hover:bg-muted/80"
+              }`}
+            >
+              Salida
+            </button>
+          </div>
+        )}
         <div className="flex items-center gap-2">
           <button
             onClick={() => setSnapEnabled(!snapEnabled)}
@@ -957,6 +1670,73 @@ export function SeatMapEditor({
           >
             Grid {showGrid ? "ON" : "OFF"}
           </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                setAddingGuide(addingGuide === "horizontal" ? false : "horizontal");
+                setSelectionMode(false);
+              }}
+              className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1 ${
+                addingGuide === "horizontal"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted hover:bg-muted/80"
+              }`}
+              title="Agregar Regla Horizontal (click en el canvas)"
+            >
+              <Ruler className="w-4 h-4 rotate-90" />
+              H
+            </button>
+            <button
+              onClick={() => {
+                setAddingGuide(addingGuide === "vertical" ? false : "vertical");
+                setSelectionMode(false);
+              }}
+              className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1 ${
+                addingGuide === "vertical"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted hover:bg-muted/80"
+              }`}
+              title="Agregar Regla Vertical (click en el canvas)"
+            >
+              <Ruler className="w-4 h-4" />
+              V
+            </button>
+          </div>
+          <button
+            onClick={() => {
+              setSelectionMode(!selectionMode);
+              setAddingGuide(false);
+              if (!selectionMode) {
+                setSelectedSeats(new Set());
+              }
+            }}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
+              selectionMode
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted hover:bg-muted/80"
+            }`}
+            title="Modo Selección Múltiple (arrastra para seleccionar)"
+          >
+            <MousePointer2 className="w-4 h-4" />
+            Selección {selectionMode ? "ON" : "OFF"}
+          </button>
+          {selectedSeats.size > 0 && (
+            <span className="px-3 py-2 rounded-lg text-sm font-medium bg-primary/20 text-primary">
+              {selectedSeats.size} seleccionado{selectedSeats.size > 1 ? "s" : ""}
+            </span>
+          )}
+          {(horizontalGuides.length > 0 || verticalGuides.length > 0) && (
+            <button
+              onClick={() => {
+                setHorizontalGuides([]);
+                setVerticalGuides([]);
+              }}
+              className="px-3 py-2 rounded-lg text-sm font-medium bg-destructive/20 text-destructive hover:bg-destructive/30"
+              title="Eliminar todas las reglas"
+            >
+              Limpiar Reglas ({horizontalGuides.length + verticalGuides.length})
+            </button>
+          )}
         </div>
         <div className="flex-1" />
         <button
@@ -967,317 +1747,376 @@ export function SeatMapEditor({
         </button>
       </div>
 
-      {/* Canvas Container with zoom and pan */}
+      {/* Canvas Container - Full width, no borders, site background */}
       <div
         ref={containerRef}
-        className="relative bg-muted/20 border-2 border-dashed border-border rounded-lg overflow-hidden"
-        style={{ height: "800px" }}
+        className="relative w-full overflow-hidden"
+        style={{ 
+          height: '100vh',
+          width: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
         onMouseDown={handlePanStart}
         onMouseMove={handlePanMove}
         onMouseUp={handlePanEnd}
         onMouseLeave={handlePanEnd}
-        onWheel={(e) => {
-          e.preventDefault();
-          const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
-          setZoom((prev) => Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, prev + delta)));
-        }}
       >
-        {/* Canvas with transform */}
-        <div
-          ref={canvasRef}
-          onClick={handleCanvasClick}
-          onMouseMove={(e) => {
-            if (editMode === "seats") {
-              handleSeatDrag(e);
-            }
-            if (editMode === "elements") {
-              handleElementDrag(e);
-              handleElementResize(e);
-            }
-          }}
-          onMouseUp={(e) => {
-            if (editMode === "seats") {
-              handleSeatDragEnd();
-            }
-            if (editMode === "elements") {
-              handleElementDragEnd();
-              handleElementResizeEnd();
-            }
-          }}
-          onMouseLeave={(e) => {
-            if (editMode === "seats") {
-              handleSeatDragEnd();
-            }
-            if (editMode === "elements") {
-              handleElementDragEnd();
-              handleElementResizeEnd();
-            }
-          }}
-          className="relative bg-muted/30 cursor-crosshair"
-          style={{
-            width: `${CANVAS_WIDTH}px`,
-            height: `${CANVAS_HEIGHT}px`,
-            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-            transformOrigin: "0 0",
-            ...gridBackgroundStyle,
-          }}
-        >
-          {/* SVG Template Background */}
-          {svgTemplate && (
-            <div
-              className="absolute pointer-events-none z-0"
-              style={{
-                left: `${(CANVAS_WIDTH - busLength) / 2}px`,
-                top: `${(CANVAS_HEIGHT - busWidth) / 2}px`,
-                width: `${busLength}px`,
-                height: `${busWidth}px`,
-              }}
-              dangerouslySetInnerHTML={{ __html: svgTemplate }}
-            />
-          )}
-
-          {/* SVG Template Background */}
-          {svgTemplate && (
-            <div
-              className="absolute pointer-events-none z-0"
-              style={{
-                left: `${(CANVAS_WIDTH - busLength) / 2}px`,
-                top: `${(CANVAS_HEIGHT - busWidth) / 2}px`,
-                width: `${busLength}px`,
-                height: `${busWidth}px`,
-              }}
-              dangerouslySetInnerHTML={{ __html: svgTemplate }}
-            />
-          )}
-
-          {/* Bus Floor Layout - Top Deck (Floor 2) - Vista Superior Horizontal */}
-          {seats.some(s => s.floor === 2) && (
-            <div
-              className={`absolute border-2 border-gray-400 rounded-lg bg-white ${
-                selectedFloor === 2 ? "opacity-100 z-5" : "opacity-40 z-0"
-              }`}
-              style={{
-                left: `${(CANVAS_WIDTH - busLength) / 2}px`,
-                top: `${(CANVAS_HEIGHT - busWidth * 2 - FLOOR_OFFSET) / 2}px`,
-                width: `${busLength}px`,
-                height: `${busWidth}px`,
-              }}
-            >
-              {/* Top Deck Label */}
-              <div className="absolute -top-6 left-0 right-0 flex items-center justify-center">
-                <div className="bg-gray-100 border border-gray-300 px-3 py-1 rounded text-xs font-semibold text-gray-700">
-                  Top deck
-                </div>
-              </div>
-
-              {/* FRONT Label - Left Side */}
-              <div className="absolute top-1/2 -left-8 transform -translate-y-1/2 -rotate-90 flex items-center gap-1 bg-gray-100 border border-gray-300 px-2 py-1 rounded text-xs font-semibold text-gray-700 whitespace-nowrap">
-                <ArrowUp className="w-3 h-3" />
-                <span>FRONT</span>
-              </div>
-
-              {/* BACK Label - Right Side */}
-              <div className="absolute top-1/2 -right-8 transform -translate-y-1/2 rotate-90 flex items-center gap-1 bg-gray-100 border border-gray-300 px-2 py-1 rounded text-xs font-semibold text-gray-700 whitespace-nowrap">
-                <ArrowDown className="w-3 h-3" />
-                <span>BACK</span>
-              </div>
-
-              {/* Corner Markers - Top Deck */}
-
-              {/* Central Aisle - Horizontal orientation */}
-              <div
-                className="absolute top-1/2 left-0 right-0 transform -translate-y-1/2 border-t border-b border-dashed border-gray-400 bg-gray-100"
-                style={{ height: `${AISLE_WIDTH}px` }}
-              >
-                {/* Aisle label */}
-                <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-[10px] text-gray-600 font-semibold whitespace-nowrap">
-                  PASILLO
-                </div>
-              </div>
-
-              {/* Stairs - Middle of the bus with diagonal pattern */}
-              <div
-                className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-20 h-12 border-2 border-orange-500 rounded bg-orange-100 flex flex-col items-center justify-center z-10"
-                style={{ 
-                  backgroundImage: "repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(251, 146, 60, 0.3) 4px, rgba(251, 146, 60, 0.3) 8px)",
-                }}
-              >
-                <Layers className="w-4 h-4 text-orange-700 z-10" />
-                <div className="text-[10px] font-semibold text-orange-800 mt-1 text-center z-10">
-                  ESCALERA
-                </div>
-              </div>
-
-              {/* Side Windows - Top and Bottom */}
-              <div className="absolute top-0 left-2 right-2 h-1 bg-gray-200" />
-              <div className="absolute bottom-0 left-2 right-2 h-1 bg-gray-200" />
-            </div>
-          )}
-
-          {/* Bus Floor Layout - Bottom Deck (Floor 1) - Vista Superior Horizontal */}
+        {/* Canvas Wrapper - Contains both SVG and interactive canvas */}
+        {canvasSize.width > 0 && canvasSize.height > 0 && (
           <div
-            className={`absolute border-2 border-gray-400 rounded-lg bg-white ${
-              selectedFloor === 1 ? "opacity-100 z-5" : "opacity-40 z-0"
-            }`}
             style={{
-              left: `${(CANVAS_WIDTH - busLength) / 2}px`,
-              top: `${(CANVAS_HEIGHT - busWidth) / 2 + (seats.some(s => s.floor === 2) ? busWidth + FLOOR_OFFSET : 0)}px`,
-              width: `${busLength}px`,
-              height: `${busWidth}px`,
+              position: 'relative',
+              width: `${canvasSize.width}px`,
+              height: `${canvasSize.height}px`,
             }}
           >
-            {/* Bottom Deck Label */}
-            <div className="absolute -top-6 left-0 right-0 flex items-center justify-center">
-              <div className="bg-gray-100 border border-gray-300 px-3 py-1 rounded text-xs font-semibold text-gray-700">
-                Bottom deck
-              </div>
-            </div>
-
-            {/* FRONT Label - Left Side */}
-            <div className="absolute top-1/2 -left-8 transform -translate-y-1/2 -rotate-90 flex items-center gap-1 bg-gray-100 border border-gray-300 px-2 py-1 rounded text-xs font-semibold text-gray-700 whitespace-nowrap">
-              <ArrowUp className="w-3 h-3" />
-              <span>FRONT</span>
-            </div>
-
-            {/* BACK Label - Right Side */}
-            <div className="absolute top-1/2 -right-8 transform -translate-y-1/2 rotate-90 flex items-center gap-1 bg-gray-100 border border-gray-300 px-2 py-1 rounded text-xs font-semibold text-gray-700 whitespace-nowrap">
-              <ArrowDown className="w-3 h-3" />
-              <span>BACK</span>
-            </div>
-
-
-            {/* Bus Elements - Driver, Doors (Editable) */}
-            {busElements
-              .filter(el => el.floor === selectedFloor)
-              .map((element) => {
-                const isSelected = selectedElement === element.id;
-                const isDragging = draggingElement === element.id;
-                const isResizing = resizingElement === element.id;
-                
-                let bgColor = "bg-gray-100";
-                let borderColor = "border-gray-400";
-                let label = "";
-                
-                if (element.type === "driver") {
-                  bgColor = "bg-gray-100";
-                  borderColor = "border-gray-400";
-                  label = "CONDUCTOR";
-                } else if (element.type === "frontDoor") {
-                  bgColor = "bg-gray-50";
-                  borderColor = "border-dashed border-gray-400";
-                  label = "ENTRADA";
-                } else if (element.type === "rearDoor") {
-                  bgColor = "bg-gray-50";
-                  borderColor = "border-dashed border-gray-400";
-                  label = "SALIDA";
+            {/* SVG Background */}
+            {svgTemplate && (
+              <div
+                className="absolute inset-0 pointer-events-none z-0"
+                style={{
+                  width: '100%',
+                  height: '100%',
+                }}
+                dangerouslySetInnerHTML={{ 
+                  __html: svgTemplate
+                }}
+              />
+            )}
+            
+            {/* Interactive Canvas - positioned exactly over SVG */}
+            <div
+              ref={canvasRef}
+              onClick={handleCanvasClick}
+              onMouseMove={(e) => {
+                if (editMode === "seats") {
+                  // handleSeatDrag is now handled globally via useEffect
+                  if (creatingFreeSpace) {
+                    handleFreeSpaceMouseMove(e);
+                  }
+                  if (isSelecting) {
+                    handleSelectionMove(e);
+                  }
                 }
-                
-                return (
-                  <div
-                    key={element.id}
-                    className={`absolute ${bgColor} ${borderColor} rounded flex items-center justify-center group ${
-                      editMode === "elements" ? "cursor-move" : ""
-                    } ${isSelected ? "ring-2 ring-primary" : ""} ${
-                      isDragging || isResizing ? "z-50" : "z-20"
-                    }`}
-                    style={{
-                      left: `${element.x}px`,
-                      top: element.type === "frontDoor" || element.type === "rearDoor" 
-                        ? `${element.y + busWidth / 2}px`
-                        : `${element.y}px`,
-                      width: `${element.width * (element.type === "driver" ? sizeMultipliers.driver : sizeMultipliers.doors)}px`,
-                      height: `${element.height * (element.type === "driver" ? sizeMultipliers.driver : sizeMultipliers.doors)}px`,
-                      transform: element.type === "frontDoor" || element.type === "rearDoor"
-                        ? "translateY(-50%)"
-                        : "none",
-                    }}
-                    onMouseDown={(e) => {
-                      if (editMode === "elements") {
+                if (editMode === "elements") {
+                  // Element drag and resize are now handled globally via useEffect
+                  if (draggingFreeSpace) {
+                    handleFreeSpaceDrag(e);
+                  }
+                }
+              }}
+              onMouseUp={(e) => {
+                if (editMode === "seats") {
+                  handleSeatDragEnd();
+                  if (creatingFreeSpace) {
+                    handleFreeSpaceMouseUp(e);
+                  }
+                  if (isSelecting) {
+                    handleSelectionEnd();
+                  }
+                }
+                if (editMode === "elements") {
+                  handleElementDragEnd();
+                  handleElementResizeEnd();
+                  handleFreeSpaceDragEnd();
+                  handleFreeSpaceResizeEnd();
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (editMode === "seats") {
+                  handleSeatDragEnd();
+                  if (creatingFreeSpace) {
+                    setCreatingFreeSpace(false);
+                    setFreeSpaceStart(null);
+                    setFreeSpaceCurrent(null);
+                  }
+                }
+                if (editMode === "elements") {
+                  handleElementDragEnd();
+                  handleElementResizeEnd();
+                  handleFreeSpaceDragEnd();
+                  handleFreeSpaceResizeEnd();
+                }
+              }}
+              className={`absolute inset-0 ${addingGuide ? "cursor-crosshair" : selectionMode ? "cursor-default" : "cursor-crosshair"}`}
+              style={{
+                width: '100%',
+                height: '100%',
+                ...gridBackgroundStyle,
+              }}
+              onMouseDown={(e) => {
+                if (selectionMode && editMode === "seats") {
+                  handleSelectionStart(e);
+                }
+              }}
+              onMouseMove={(e) => {
+                if (isSelecting) {
+                  handleSelectionMove(e);
+                }
+              }}
+              onMouseUp={() => {
+                if (isSelecting) {
+                  handleSelectionEnd();
+                }
+              }}
+            >
+          {/* Horizontal Guides (Rulers) */}
+          {horizontalGuides.map((guideY) => (
+            <div
+              key={`h-${guideY}`}
+              className="absolute left-0 right-0 z-5 pointer-events-none"
+              style={{
+                top: `${logicalToPhysicalY(guideY)}px`,
+                height: '2px',
+                backgroundColor: '#3b82f6',
+                boxShadow: '0 0 4px rgba(59, 130, 246, 0.5)',
+              }}
+            >
+              <div
+                className="absolute -left-8 top-1/2 -translate-y-1/2 bg-blue-500 text-white text-xs px-1 rounded"
+                style={{ fontSize: '10px' }}
+              >
+                {Math.round(guideY)}
+              </div>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  removeHorizontalGuide(guideY);
+                }}
+                className="absolute -right-8 top-1/2 -translate-y-1/2 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity pointer-events-auto"
+                title="Eliminar regla"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          ))}
+
+          {/* Vertical Guides (Rulers) */}
+          {verticalGuides.map((guideX) => (
+            <div
+              key={`v-${guideX}`}
+              className="absolute top-0 bottom-0 z-5 pointer-events-none"
+              style={{
+                left: `${logicalToPhysicalX(guideX)}px`,
+                width: '2px',
+                backgroundColor: '#3b82f6',
+                boxShadow: '0 0 4px rgba(59, 130, 246, 0.5)',
+              }}
+            >
+              <div
+                className="absolute -top-6 left-1/2 -translate-x-1/2 bg-blue-500 text-white text-xs px-1 rounded"
+                style={{ fontSize: '10px' }}
+              >
+                {Math.round(guideX)}
+              </div>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  removeVerticalGuide(guideX);
+                }}
+                className="absolute -bottom-6 left-1/2 -translate-x-1/2 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity pointer-events-auto"
+                title="Eliminar regla"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          ))}
+
+          {/* Selection Box */}
+          {selectionBox && (
+            <div
+              className="absolute border-2 border-primary bg-primary/10 z-40 pointer-events-none"
+              style={{
+                left: `${logicalToPhysicalX(Math.min(selectionBox.start.x, selectionBox.end.x))}px`,
+                top: `${logicalToPhysicalY(Math.min(selectionBox.start.y, selectionBox.end.y))}px`,
+                width: `${logicalToPhysicalWidth(Math.abs(selectionBox.end.x - selectionBox.start.x))}px`,
+                height: `${logicalToPhysicalHeight(Math.abs(selectionBox.end.y - selectionBox.start.y))}px`,
+              }}
+            />
+          )}
+
+          {/* Bus Elements - Doors (Editable) */}
+          {busElements
+            .filter(el => el.floor === selectedFloor)
+            .map((element) => {
+              const isSelected = selectedElement === element.id;
+              const isDragging = draggingElement === element.id;
+              const isResizing = resizingElement === element.id;
+              
+              let bgColor = "bg-gray-50";
+              let borderColor = "border-dashed border-gray-400";
+              let label = "";
+              
+              if (element.type === "frontDoor") {
+                label = "ENTRADA";
+              } else if (element.type === "rearDoor") {
+                label = "SALIDA";
+              }
+              
+              return (
+                <div
+                  key={element.id}
+                  className={`absolute ${bgColor} ${borderColor} rounded flex items-center justify-center group transition-colors ${
+                    editMode === "elements" ? "cursor-move" : ""
+                  } ${isSelected ? "ring-2 ring-primary bg-primary/20" : ""} ${
+                    isDragging || isResizing ? "z-50" : "z-20"
+                  }`}
+                  style={{
+                    left: `${logicalToPhysicalX(element.x)}px`,
+                    top: `${logicalToPhysicalY(element.y)}px`,
+                    width: `${logicalToPhysicalWidth(element.width * sizeMultipliers.doors)}px`,
+                    height: `${logicalToPhysicalHeight(element.height * sizeMultipliers.doors)}px`,
+                    transform: "translateY(-50%)",
+                  }}
+                  onMouseDown={(e) => {
+                    if (editMode === "elements") {
+                      e.stopPropagation();
+                      // Don't start drag if clicking on resize handle
+                      if (!e.target || !(e.target as HTMLElement).closest('.resize-handle')) {
                         handleElementDragStart(element.id, e);
                         setSelectedElement(element.id);
                       }
-                    }}
-                    onClick={(e) => {
-                      if (editMode === "elements") {
-                        e.stopPropagation();
+                    }
+                  }}
+                  onClick={(e) => {
+                    if (editMode === "elements") {
+                      e.stopPropagation();
+                      // Only select if not already dragging
+                      if (!draggingElement && !resizingElement) {
                         setSelectedElement(element.id);
                       }
-                    }}
-                  >
-                    <div className={`text-[10px] font-semibold text-gray-600 text-center ${
-                      element.type === "driver" ? "rotate-90" : ""
-                    } whitespace-nowrap`}>
-                      {label}
-                    </div>
-                    
-                    {/* Resize handle - bottom right corner */}
-                    {editMode === "elements" && isSelected && (
-                      <div
-                        className="absolute bottom-0 right-0 w-4 h-4 bg-primary cursor-nwse-resize opacity-0 group-hover:opacity-100 transition-opacity"
-                        style={{
-                          clipPath: "polygon(100% 0, 0 100%, 100% 100%)",
-                        }}
-                        onMouseDown={(e) => {
-                          e.stopPropagation();
-                          handleElementResizeStart(element.id, e);
-                        }}
-                        title="Arrastra para redimensionar"
-                      />
-                    )}
-                    
-                    {/* Selection indicator */}
-                    {editMode === "elements" && isSelected && (
-                      <div className="absolute -inset-1 border-2 border-primary border-dashed pointer-events-none" />
-                    )}
+                    }
+                  }}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    deleteElement(element.id, 'busElement');
+                  }}
+                >
+                  <div className="text-[10px] font-semibold text-gray-600 text-center whitespace-nowrap">
+                    {label}
                   </div>
-                );
-              })}
-
-            {/* Central Aisle - Horizontal orientation */}
-            <div
-              className="absolute top-1/2 left-0 right-0 transform -translate-y-1/2 border-t border-b border-dashed border-gray-400 bg-gray-100"
-              style={{ height: `${AISLE_WIDTH}px` }}
-            >
-              {/* Aisle label */}
-              <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-[10px] text-gray-600 font-semibold whitespace-nowrap">
-                PASILLO
-              </div>
-            </div>
-
-            {/* Stairs - Middle of the bus with diagonal pattern */}
-            {seats.some(s => s.floor === 2) && (
-              <div
-                className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-20 h-12 border-2 border-orange-500 rounded bg-orange-100 flex flex-col items-center justify-center z-10"
-                style={{ 
-                  backgroundImage: "repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(251, 146, 60, 0.3) 4px, rgba(251, 146, 60, 0.3) 8px)",
-                }}
-              >
-                <Layers className="w-4 h-4 text-orange-700 z-10" />
-                <div className="text-[10px] font-semibold text-orange-800 mt-1 text-center z-10">
-                  ESCALERA
+                  
+                  {/* Delete button */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteElement(element.id, 'busElement');
+                    }}
+                    className="absolute -top-2 -right-2 w-5 h-5 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:scale-110 z-30"
+                    title="Eliminar elemento"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                  
+                  {/* Resize handles - all sides and corners */}
+                  {editMode === "elements" && isSelected && (
+                    <>
+                      {/* Corner handles */}
+                      <div className="resize-handle absolute -top-1 -left-1 w-4 h-4 bg-primary cursor-nwse-resize z-50 rounded-sm" onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); handleElementResizeStart(element.id, 'nw', e); }} title="Arrastra para redimensionar" />
+                      <div className="resize-handle absolute -top-1 left-1/2 -translate-x-1/2 w-4 h-4 bg-primary cursor-ns-resize z-50 rounded-sm" onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); handleElementResizeStart(element.id, 'n', e); }} title="Arrastra para redimensionar" />
+                      <div className="resize-handle absolute -top-1 -right-1 w-4 h-4 bg-primary cursor-nesw-resize z-50 rounded-sm" onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); handleElementResizeStart(element.id, 'ne', e); }} title="Arrastra para redimensionar" />
+                      <div className="resize-handle absolute top-1/2 -right-1 -translate-y-1/2 w-4 h-4 bg-primary cursor-ew-resize z-50 rounded-sm" onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); handleElementResizeStart(element.id, 'e', e); }} title="Arrastra para redimensionar" />
+                      <div className="resize-handle absolute -bottom-1 -right-1 w-4 h-4 bg-primary cursor-nwse-resize z-50 rounded-sm" onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); handleElementResizeStart(element.id, 'se', e); }} title="Arrastra para redimensionar" />
+                      <div className="resize-handle absolute -bottom-1 left-1/2 -translate-x-1/2 w-4 h-4 bg-primary cursor-ns-resize z-50 rounded-sm" onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); handleElementResizeStart(element.id, 's', e); }} title="Arrastra para redimensionar" />
+                      <div className="resize-handle absolute -bottom-1 -left-1 w-4 h-4 bg-primary cursor-nesw-resize z-50 rounded-sm" onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); handleElementResizeStart(element.id, 'sw', e); }} title="Arrastra para redimensionar" />
+                      <div className="resize-handle absolute top-1/2 -left-1 -translate-y-1/2 w-4 h-4 bg-primary cursor-ew-resize z-50 rounded-sm" onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); handleElementResizeStart(element.id, 'w', e); }} title="Arrastra para redimensionar" />
+                    </>
+                  )}
+                  
+                  {/* Selection indicator */}
+                  {editMode === "elements" && isSelected && (
+                    <div className="absolute -inset-1 border-2 border-primary border-dashed pointer-events-none" />
+                  )}
                 </div>
-              </div>
-            )}
+              );
+            })}
 
-            {/* Side Windows - Top and Bottom */}
-            <div className="absolute top-0 left-2 right-2 h-1 bg-gray-200" />
-            <div className="absolute bottom-0 left-2 right-2 h-1 bg-gray-200" />
+          {/* Free Space Elements */}
+          {freeSpaces
+            .filter(fs => fs.floor === selectedFloor)
+            .map((freeSpace) => {
+              const isSelected = selectedFreeSpace === freeSpace.id;
+              const isDragging = draggingFreeSpace === freeSpace.id;
+              const isResizing = resizingFreeSpace === freeSpace.id;
+              
+              return (
+                <div
+                  key={freeSpace.id}
+                  className={`absolute bg-transparent border-2 border-dashed border-gray-400 rounded flex items-center justify-center group ${
+                    editMode === "elements" ? "cursor-move" : ""
+                  } ${isSelected ? "ring-2 ring-primary border-primary" : ""} ${
+                    isDragging || isResizing ? "z-50" : "z-15"
+                  }`}
+                  style={{
+                    left: `${logicalToPhysicalX(freeSpace.x)}px`,
+                    top: `${logicalToPhysicalY(freeSpace.y)}px`,
+                    width: `${logicalToPhysicalWidth(freeSpace.width)}px`,
+                    height: `${logicalToPhysicalHeight(freeSpace.height)}px`,
+                  }}
+                  onMouseDown={(e) => {
+                    if (editMode === "elements") {
+                      handleFreeSpaceDragStart(freeSpace.id, e);
+                    }
+                  }}
+                  onClick={(e) => {
+                    if (editMode === "elements") {
+                      e.stopPropagation();
+                      setSelectedFreeSpace(freeSpace.id);
+                    }
+                  }}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    deleteElement(freeSpace.id, 'freeSpace');
+                  }}
+                >
+                  {/* Delete button */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteElement(freeSpace.id, 'freeSpace');
+                    }}
+                    className="absolute -top-2 -right-2 w-5 h-5 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:scale-110 z-30"
+                    title="Eliminar espacio libre"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                  
+                  {/* Resize handles - all sides and corners */}
+                  {editMode === "elements" && isSelected && (
+                    <>
+                      {/* Corner handles */}
+                      <div className="resize-handle absolute -top-1 -left-1 w-4 h-4 bg-primary cursor-nwse-resize z-50 rounded-sm" onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); handleFreeSpaceResizeStart(freeSpace.id, 'nw', e); }} title="Arrastra para redimensionar" />
+                      <div className="resize-handle absolute -top-1 left-1/2 -translate-x-1/2 w-4 h-4 bg-primary cursor-ns-resize z-50 rounded-sm" onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); handleFreeSpaceResizeStart(freeSpace.id, 'n', e); }} title="Arrastra para redimensionar" />
+                      <div className="resize-handle absolute -top-1 -right-1 w-4 h-4 bg-primary cursor-nesw-resize z-50 rounded-sm" onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); handleFreeSpaceResizeStart(freeSpace.id, 'ne', e); }} title="Arrastra para redimensionar" />
+                      <div className="resize-handle absolute top-1/2 -right-1 -translate-y-1/2 w-4 h-4 bg-primary cursor-ew-resize z-50 rounded-sm" onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); handleFreeSpaceResizeStart(freeSpace.id, 'e', e); }} title="Arrastra para redimensionar" />
+                      <div className="resize-handle absolute -bottom-1 -right-1 w-4 h-4 bg-primary cursor-nwse-resize z-50 rounded-sm" onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); handleFreeSpaceResizeStart(freeSpace.id, 'se', e); }} title="Arrastra para redimensionar" />
+                      <div className="resize-handle absolute -bottom-1 left-1/2 -translate-x-1/2 w-4 h-4 bg-primary cursor-ns-resize z-50 rounded-sm" onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); handleFreeSpaceResizeStart(freeSpace.id, 's', e); }} title="Arrastra para redimensionar" />
+                      <div className="resize-handle absolute -bottom-1 -left-1 w-4 h-4 bg-primary cursor-nesw-resize z-50 rounded-sm" onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); handleFreeSpaceResizeStart(freeSpace.id, 'sw', e); }} title="Arrastra para redimensionar" />
+                      <div className="resize-handle absolute top-1/2 -left-1 -translate-y-1/2 w-4 h-4 bg-primary cursor-ew-resize z-50 rounded-sm" onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); handleFreeSpaceResizeStart(freeSpace.id, 'w', e); }} title="Arrastra para redimensionar" />
+                    </>
+                  )}
+                  
+                  {/* Selection indicator */}
+                  {editMode === "elements" && isSelected && (
+                    <div className="absolute -inset-1 border-2 border-primary border-dashed pointer-events-none" />
+                  )}
+                </div>
+              );
+            })}
 
-          </div>
-
-          {/* Floor separator for two-story buses - Horizontal orientation */}
-          {seatsForOtherFloor.length > 0 && (
-            <div 
-              className="absolute left-1/2 transform -translate-x-1/2 border-l-2 border-dashed border-primary/40 z-10"
+          {/* Preview free space while creating */}
+          {creatingFreeSpace && freeSpaceStart && freeSpaceCurrent && (
+            <div
+              className="absolute bg-transparent border-2 border-dashed border-primary rounded z-40"
               style={{
-                top: `${(CANVAS_HEIGHT - busWidth * 2 - FLOOR_OFFSET) / 2 + busWidth}px`,
-                height: `${FLOOR_OFFSET}px`,
+                left: `${logicalToPhysicalX(Math.min(freeSpaceStart.x, freeSpaceCurrent.x))}px`,
+                top: `${logicalToPhysicalY(Math.min(freeSpaceStart.y, freeSpaceCurrent.y))}px`,
+                width: `${logicalToPhysicalWidth(Math.abs(freeSpaceCurrent.x - freeSpaceStart.x))}px`,
+                height: `${logicalToPhysicalHeight(Math.abs(freeSpaceCurrent.y - freeSpaceStart.y))}px`,
               }}
-            >
-              <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 -rotate-90 bg-background px-2 text-xs text-muted-foreground whitespace-nowrap">
-                Separador de Pisos
-              </div>
-            </div>
+            />
           )}
 
           {/* Instructions */}
@@ -1286,7 +2125,7 @@ export function SeatMapEditor({
               <div className="text-center text-muted-foreground bg-background/80 p-4 rounded-lg">
                 <p className="text-lg mb-2 font-semibold">Haz clic para agregar asientos en el Piso {selectedFloor}</p>
                 <p className="text-sm">Arrastra para mover • Doble clic para editar número • Botón X para eliminar</p>
-                <p className="text-sm mt-1">Ctrl/Cmd + Arrastrar para mover el canvas • Rueda del mouse para zoom</p>
+                <p className="text-sm mt-1">El SVG se ajusta automáticamente al tamaño de la pantalla</p>
                 {snapEnabled && (
                   <p className="text-xs mt-2 text-primary">Snap activado: Los asientos se alinearán automáticamente</p>
                 )}
@@ -1295,66 +2134,94 @@ export function SeatMapEditor({
           )}
 
           {/* Seats for current floor */}
-          {seatsForCurrentFloor.map((seat) => (
-            <div
-              key={seat.id}
-              draggable={false}
-              onMouseDown={(e) => handleSeatDragStart(seat.id, e)}
-              onDoubleClick={(e) => handleSeatDoubleClick(seat.id, e)}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                deleteSeat(seat.id);
-              }}
-              className={`absolute ${getSeatColor(seat.type, seat.floor)} rounded transition-all cursor-move hover:scale-110 hover:shadow-lg flex items-center justify-center text-white text-xs font-semibold group ${
-                dragging === seat.id ? "z-50" : "z-10"
-              } ${seat.type === "stair" ? "border-2 border-orange-700" : ""} ${seat.type === "bathroom" ? "border-2 border-cyan-600" : ""}`}
-              style={{
-                left: `${seat.x}px`,
-                top: `${seat.y}px`,
-                ...getSeatSize(seat.type),
-                ...(seat.type === "stair" ? {
-                  backgroundImage: "repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255, 255, 255, 0.2) 4px, rgba(255, 255, 255, 0.2) 8px)",
-                } : {}),
-              }}
-              title={`Asiento ${seat.number} - ${seatTypeLabels[seat.type]} - Piso ${seat.floor} (Doble clic para editar, click derecho o X para eliminar)`}
-            >
-              {editingSeatId === seat.id ? (
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={editingNumber}
-                  onChange={(e) => setEditingNumber(e.target.value)}
-                  onBlur={handleNumberEditSubmit}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      handleNumberEditSubmit();
-                    } else if (e.key === "Escape") {
-                      handleNumberEditCancel();
+          {seatsForCurrentFloor.map((seat) => {
+            const isSelected = selectedSeats.has(seat.id);
+            return (
+              <div
+                key={seat.id}
+                draggable={false}
+                onMouseDown={(e) => {
+                  handleSeatDragStart(seat.id, e);
+                  // Select seat on click (if not in selection mode, select single seat)
+                  if (!selectionMode) {
+                    if (e.ctrlKey || e.metaKey) {
+                      // Toggle selection with Ctrl/Cmd
+                      const newSelected = new Set(selectedSeats);
+                      if (newSelected.has(seat.id)) {
+                        newSelected.delete(seat.id);
+                      } else {
+                        newSelected.add(seat.id);
+                      }
+                      setSelectedSeats(newSelected);
+                    } else {
+                      // Single selection
+                      setSelectedSeats(new Set([seat.id]));
                     }
-                  }}
-                  className="w-full h-full text-center bg-white text-black rounded font-semibold text-xs focus:outline-none focus:ring-2 focus:ring-primary"
-                  onClick={(e) => e.stopPropagation()}
-                />
-              ) : (
-                <>
-                  {getSeatIcon(seat.type) || <span>{seat.number}</span>}
-                  {getSeatIcon(seat.type) && (
-                    <span className="absolute bottom-0 text-[8px] font-bold">{seat.number}</span>
-                  )}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteSeat(seat.id);
+                  }
+                }}
+                onDoubleClick={(e) => handleSeatDoubleClick(seat.id, e)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  if (isSelected && selectedSeats.size > 1) {
+                    // Delete all selected seats
+                    setSeats(prev => prev.filter(s => !selectedSeats.has(s.id)));
+                    setSelectedSeats(new Set());
+                  } else {
+                    deleteSeat(seat.id);
+                  }
+                }}
+                className={`absolute ${getSeatColor(seat.type, seat.floor)} rounded transition-colors cursor-move flex items-center justify-center text-white text-xs font-semibold group ${
+                  dragging === seat.id ? "z-50" : "z-10"
+                } ${isSelected ? "ring-4 ring-primary ring-offset-2 bg-primary/80" : ""} ${seat.type === "stair" ? "border-2 border-orange-700" : ""} ${seat.type === "bathroom" ? "border-2 border-cyan-600" : ""}`}
+                style={{
+                  left: `${logicalToPhysicalX(seat.x)}px`,
+                  top: `${logicalToPhysicalY(seat.y)}px`,
+                  width: `${logicalToPhysicalWidth(getSeatSize(seat.type).width)}px`,
+                  height: `${logicalToPhysicalHeight(getSeatSize(seat.type).height)}px`,
+                  ...(seat.type === "stair" ? {
+                    backgroundImage: "repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255, 255, 255, 0.2) 4px, rgba(255, 255, 255, 0.2) 8px)",
+                  } : {}),
+                }}
+                title={`Asiento ${seat.number} - ${seatTypeLabels[seat.type]} - Piso ${seat.floor} (Doble clic para editar, click derecho o X para eliminar)`}
+              >
+                {editingSeatId === seat.id ? (
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={editingNumber}
+                    onChange={(e) => setEditingNumber(e.target.value)}
+                    onBlur={handleNumberEditSubmit}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        handleNumberEditSubmit();
+                      } else if (e.key === "Escape") {
+                        handleNumberEditCancel();
+                      }
                     }}
-                    className="absolute -top-2 -right-2 w-5 h-5 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:scale-110"
-                    title="Eliminar asiento"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </>
-              )}
-            </div>
-          ))}
+                    className="w-full h-full text-center bg-white text-black rounded font-semibold text-xs focus:outline-none focus:ring-2 focus:ring-primary"
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                ) : (
+                  <>
+                    {getSeatIcon(seat.type) || <span>{seat.number}</span>}
+                    {getSeatIcon(seat.type) && (
+                      <span className="absolute bottom-0 text-[8px] font-bold">{seat.number}</span>
+                    )}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteSeat(seat.id);
+                      }}
+                      className="absolute -top-2 -right-2 w-5 h-5 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:scale-110"
+                      title="Eliminar asiento"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </>
+                )}
+              </div>
+            );
+          })}
 
           {/* Seats for other floor (dimmed) */}
           {seatsForOtherFloor.map((seat) => (
@@ -1362,9 +2229,10 @@ export function SeatMapEditor({
               key={seat.id}
               className={`absolute ${getSeatColor(seat.type, seat.floor)} rounded opacity-30 pointer-events-none ${seat.type === "stair" ? "border-2 border-orange-700" : ""} ${seat.type === "bathroom" ? "border-2 border-cyan-600" : ""}`}
               style={{
-                left: `${seat.x}px`,
-                top: `${seat.y}px`,
-                ...getSeatSize(seat.type),
+                left: `${logicalToPhysicalX(seat.x)}px`,
+                top: `${logicalToPhysicalY(seat.y)}px`,
+                width: `${logicalToPhysicalWidth(getSeatSize(seat.type).width)}px`,
+                height: `${logicalToPhysicalHeight(getSeatSize(seat.type).height)}px`,
                 ...(seat.type === "stair" ? {
                   backgroundImage: "repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255, 255, 255, 0.2) 4px, rgba(255, 255, 255, 0.2) 8px)",
                 } : {}),
@@ -1374,14 +2242,6 @@ export function SeatMapEditor({
               {getSeatIcon(seat.type) || <span className="text-xs">{seat.number}</span>}
             </div>
           ))}
-        </div>
-
-        {/* Pan hint */}
-        {zoom < 1 && (
-          <div className="absolute bottom-4 right-4 bg-background/90 border border-border rounded-lg p-2 text-xs text-muted-foreground z-30">
-            <div className="flex items-center gap-2">
-              <GripVertical className="w-4 h-4" />
-              <span>Ctrl/Cmd + Arrastrar para mover</span>
             </div>
           </div>
         )}

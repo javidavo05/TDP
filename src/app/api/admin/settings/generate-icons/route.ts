@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { resolve } from "path";
+import { existsSync, mkdirSync } from "fs";
 import { PWA_CONFIGS, type PWAType } from "@/config/pwa-icons";
 import { SettingsService } from "@/services/admin/SettingsService";
 import { SettingsRepository } from "@/infrastructure/db/supabase/SettingsRepository";
@@ -9,6 +10,19 @@ export const dynamic = 'force-dynamic';
 
 const settingsRepository = new SettingsRepository();
 const settingsService = new SettingsService(settingsRepository);
+
+// Check if we're in a read-only filesystem (like Vercel)
+const isReadOnlyFilesystem = () => {
+  // In Vercel, /var/task is read-only
+  // Check multiple environment variables and path indicators
+  return (
+    process.env.VERCEL === "1" || 
+    process.env.VERCEL_ENV !== undefined ||
+    process.env.VERCEL_URL !== undefined ||
+    process.cwd().includes('/var/task') ||
+    process.cwd().includes('/tmp')
+  );
+};
 
 // Helper to check admin auth
 async function checkAdminAuth() {
@@ -45,11 +59,31 @@ export async function POST() {
       configs = PWA_CONFIGS;
     }
 
+    // Check if filesystem is writable
+    if (isReadOnlyFilesystem()) {
+      return NextResponse.json({ 
+        error: "No se pueden generar iconos en producción",
+        message: "En Vercel, el sistema de archivos es de solo lectura. Los iconos deben generarse localmente.",
+        instructions: [
+          "1. Ejecuta en tu máquina local: npm run generate-icons",
+          "2. Esto generará todos los iconos en la carpeta public/",
+          "3. Haz commit y push de los archivos generados al repositorio",
+          "4. Vercel los desplegará automáticamente en el siguiente deploy"
+        ],
+        command: "npm run generate-icons"
+      }, { status: 400 });
+    }
+
     // Import sharp dynamically
     const sharp = (await import("sharp")).default;
     const { ICON_SIZES, getIconFileName, getFaviconFileName } = await import("@/config/pwa-icons");
 
     const publicDir = resolve(process.cwd(), "public");
+    
+    // Ensure public directory exists
+    if (!existsSync(publicDir)) {
+      mkdirSync(publicDir, { recursive: true });
+    }
 
     async function generateIcon(
       size: number,
@@ -78,9 +112,23 @@ export async function POST() {
         </svg>
       `;
 
-      await sharp(Buffer.from(svg))
-        .png()
-        .toFile(outputPath);
+      // Ensure directory exists
+      const dir = outputPath.substring(0, outputPath.lastIndexOf('/'));
+      if (!existsSync(dir)) {
+        mkdirSync(dir, { recursive: true });
+      }
+      
+      try {
+        await sharp(Buffer.from(svg))
+          .png()
+          .toFile(outputPath);
+      } catch (fileError: any) {
+        // If we get a read-only filesystem error, throw a more helpful message
+        if (fileError.code === 'EACCES' || fileError.message?.includes('read-only') || fileError.message?.includes('Read-only')) {
+          throw new Error("Sistema de archivos de solo lectura. Ejecuta 'npm run generate-icons' localmente.");
+        }
+        throw fileError;
+      }
     }
 
     async function generateFavicon(
@@ -109,10 +157,25 @@ export async function POST() {
         </svg>
       `;
 
-      await sharp(Buffer.from(svg))
-        .resize(32, 32)
-        .png()
-        .toFile(outputPath.replace('.ico', '.png'));
+      // Ensure directory exists
+      const faviconOutputPath = outputPath.replace('.ico', '.png');
+      const dir = faviconOutputPath.substring(0, faviconOutputPath.lastIndexOf('/'));
+      if (!existsSync(dir)) {
+        mkdirSync(dir, { recursive: true });
+      }
+      
+      try {
+        await sharp(Buffer.from(svg))
+          .resize(32, 32)
+          .png()
+          .toFile(faviconOutputPath);
+      } catch (fileError: any) {
+        // If we get a read-only filesystem error, throw a more helpful message
+        if (fileError.code === 'EACCES' || fileError.message?.includes('read-only') || fileError.message?.includes('Read-only')) {
+          throw new Error("Sistema de archivos de solo lectura. Ejecuta 'npm run generate-icons' localmente.");
+        }
+        throw fileError;
+      }
     }
 
     const pwaTypes: PWAType[] = ["public", "admin", "pos", "scanner"];

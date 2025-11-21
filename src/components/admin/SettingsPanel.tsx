@@ -234,7 +234,24 @@ export function SettingsPanel() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to generate icons");
+        
+        // If it's a read-only filesystem error, show helpful instructions
+        if (errorData.error?.includes("solo lectura") || errorData.error?.includes("read-only") || response.status === 400) {
+          const instructions = errorData.instructions || [
+            "1. Ejecuta en tu máquina local: npm run generate-icons",
+            "2. Esto generará todos los iconos en la carpeta public/",
+            "3. Haz commit y push de los archivos generados al repositorio",
+            "4. Vercel los desplegará automáticamente en el siguiente deploy"
+          ];
+          
+          throw new Error(
+            `${errorData.error || "No se pueden generar iconos en producción"}\n\n` +
+            `Instrucciones:\n${instructions.join('\n')}\n\n` +
+            `Comando: ${errorData.command || 'npm run generate-icons'}`
+          );
+        }
+        
+        throw new Error(errorData.error || errorData.message || "Failed to generate icons");
       }
 
       setSuccess("Iconos generados exitosamente. Recarga la página para ver los cambios.");
@@ -899,21 +916,42 @@ export function SettingsPanel() {
               })}
             </div>
 
-            <div className="pt-6 border-t border-border mt-6 flex gap-4">
-              <button
-                onClick={handleSavePWAIcons}
-                disabled={saving}
-                className="px-6 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-semibold"
-              >
-                {saving ? "Guardando..." : "Guardar Configuración"}
-              </button>
-              <button
-                onClick={handleGenerateIcons}
-                disabled={generatingIcons || saving}
-                className="px-6 py-2 bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-semibold"
-              >
-                {generatingIcons ? "Generando..." : "Generar Iconos"}
-              </button>
+            <div className="pt-6 border-t border-border mt-6">
+              <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 mb-4">
+                <div className="flex items-start gap-3">
+                  <div className="text-yellow-600 dark:text-yellow-400 text-lg">⚠️</div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200 mb-1">
+                      Generación de Iconos en Producción
+                    </p>
+                    <p className="text-xs text-yellow-700 dark:text-yellow-300">
+                      En Vercel, el sistema de archivos es de solo lectura. Para generar los iconos:
+                    </p>
+                    <ol className="text-xs text-yellow-700 dark:text-yellow-300 mt-2 ml-4 list-decimal space-y-1">
+                      <li>Ejecuta localmente: <code className="bg-yellow-100 dark:bg-yellow-900/40 px-1 rounded">npm run generate-icons</code></li>
+                      <li>Haz commit de los archivos generados en <code className="bg-yellow-100 dark:bg-yellow-900/40 px-1 rounded">public/</code></li>
+                      <li>Haz push al repositorio</li>
+                      <li>Vercel los desplegará automáticamente</li>
+                    </ol>
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-4">
+                <button
+                  onClick={handleSavePWAIcons}
+                  disabled={saving}
+                  className="px-6 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-semibold"
+                >
+                  {saving ? "Guardando..." : "Guardar Configuración"}
+                </button>
+                <button
+                  onClick={handleGenerateIcons}
+                  disabled={generatingIcons || saving}
+                  className="px-6 py-2 bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-semibold"
+                >
+                  {generatingIcons ? "Generando..." : "Generar Iconos (Intentar)"}
+                </button>
+              </div>
             </div>
           </div>
         </div>
