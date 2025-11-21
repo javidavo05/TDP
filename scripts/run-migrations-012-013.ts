@@ -38,6 +38,9 @@ async function runMigration(filename: string) {
           const { error: queryError } = await supabase.from('_migrations').select('*').limit(0);
           if (queryError) {
             // Use raw SQL execution via REST API
+            if (!SUPABASE_SERVICE_ROLE_KEY) {
+              throw new Error('SUPABASE_SERVICE_ROLE_KEY is not defined');
+            }
             const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/exec_sql`, {
               method: 'POST',
               headers: {
