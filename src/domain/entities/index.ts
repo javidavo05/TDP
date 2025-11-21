@@ -13,4 +13,5 @@ export * from "./POSTerminal";
 export * from "./POSCashSession";
 export * from "./POSTransaction";
 export * from "./CashCountBreakdown";
+export * from "./BusAssignmentChange";
 
