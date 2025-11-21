@@ -98,7 +98,11 @@ export default function BusDetailPage() {
         odometer: bus.odometer?.toString() || "0",
       });
       if (bus.seatMap?.seats) {
-        setSeats(bus.seatMap.seats);
+        // Ensure all seats have floor property
+        setSeats(bus.seatMap.seats.map(seat => ({
+          ...seat,
+          floor: seat.floor || 1
+        })));
       }
       if (bus.seatMap && 'visualLayout' in bus.seatMap && bus.seatMap.visualLayout) {
         setLayout(bus.seatMap.visualLayout as any);
