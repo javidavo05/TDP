@@ -297,12 +297,14 @@ export default function NewBusWizardPage() {
                   </div>
                 </div>
                 <div className="bg-card border border-border rounded-lg p-4">
-                  <SeatMapEditor
-                    initialSeats={seats}
-                    onSeatsChange={setSeats}
-                    initialLayout={layout}
-                    onLayoutChange={setLayout}
-                  />
+            <SeatMapEditor
+              initialSeats={seats.map(s => ({ ...s, floor: s.floor || 1 })) as any}
+              onSeatsChange={(newSeats: any) => {
+                setSeats(newSeats.map((s: any) => ({ ...s, floor: s.floor || 1 })));
+              }}
+              initialLayout={layout}
+              onLayoutChange={setLayout}
+            />
                 </div>
                 {seats.length === 0 && (
                   <div className="bg-warning/10 border border-warning/20 rounded-lg p-4">
