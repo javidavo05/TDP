@@ -46,7 +46,7 @@ export function SecondaryDisplay({
 
   return (
     <div className={`w-full h-full ${className}`}>
-      <AdvertisingDisplay images={advertisingImages} />
+      <AdvertisingDisplay items={advertisingImages.map((url, index) => ({ id: `img-${index}`, type: 'image' as const, url, duration: 5000 }))} />
     </div>
   );
 }
