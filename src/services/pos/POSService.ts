@@ -150,7 +150,7 @@ export class POSService {
       transactionType: "sale",
       amount: totalAmount,
       paymentMethod: data.paymentMethod,
-      receivedAmount: receivedAmount || null,
+      receivedAmount: receivedAmount || undefined,
       changeAmount,
       processedByUserId: data.processedByUserId,
     });
