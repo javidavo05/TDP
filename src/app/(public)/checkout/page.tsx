@@ -23,13 +23,20 @@ function CheckoutContent() {
     paymentMethod: "yappy" as string,
   });
   const [ticketId, setTicketId] = useState<string | null>(null);
-  const [discount, setDiscount] = useState({
+  const [discount, setDiscount] = useState<{
+    couponDiscount: number;
+    seniorDiscount: number;
+    totalDiscount: number;
+    coupon?: { id: string; code: string };
+    isSenior: boolean;
+    couponCode?: string;
+  }>({
     couponDiscount: 0,
     seniorDiscount: 0,
     totalDiscount: 0,
-    coupon: undefined as { id: string; code: string } | undefined,
+    coupon: undefined,
     isSenior: false,
-    couponCode: undefined as string | undefined,
+    couponCode: undefined,
   });
 
   const tripId = searchParams.get("tripId");

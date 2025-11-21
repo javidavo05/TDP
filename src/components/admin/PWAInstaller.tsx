@@ -137,9 +137,9 @@ export function PWAInstaller() {
         alert(
           `Para instalar ${pwa.name}:\n\n` +
           `1. Abre ${pwa.url} en tu navegador\n` +
-          `2. En Chrome/Edge: Menú (⋮) > "Instalar aplicación"\n` +
-          `3. En Safari: Compartir > "Añadir a pantalla de inicio"\n` +
-          `4. En Firefox: Menú > "Instalar"\n\n` +
+          `2. En Chrome/Edge: Menú (⋮) > Instalar aplicación\n` +
+          `3. En Safari: Compartir > Añadir a pantalla de inicio\n` +
+          `4. En Firefox: Menú > Instalar\n\n` +
           `O visita directamente: ${window.location.origin}${pwa.url}`
         );
       }
@@ -231,9 +231,9 @@ export function PWAInstaller() {
       <div className="bg-muted/50 border border-border rounded-lg p-4">
         <h3 className="font-semibold mb-2">Instrucciones de Instalación</h3>
         <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
-          <li>Chrome/Edge: Menú (⋮) → "Instalar aplicación" o "Añadir a pantalla de inicio"</li>
-          <li>Safari (iOS): Compartir → "Añadir a pantalla de inicio"</li>
-          <li>Firefox: Menú → "Instalar"</li>
+          <li>Chrome/Edge: Menú (⋮) → &quot;Instalar aplicación&quot; o &quot;Añadir a pantalla de inicio&quot;</li>
+          <li>Safari (iOS): Compartir → &quot;Añadir a pantalla de inicio&quot;</li>
+          <li>Firefox: Menú → &quot;Instalar&quot;</li>
           <li>Algunas aplicaciones requieren que visites su URL directamente para instalar</li>
         </ul>
       </div>
