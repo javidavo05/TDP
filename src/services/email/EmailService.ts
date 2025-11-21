@@ -1,6 +1,7 @@
 import { Resend } from "resend";
 import { Ticket } from "@/domain/entities";
 import { TicketConfirmationEmail } from "@/templates/email/TicketConfirmationEmail";
+import { MultipleTicketsConfirmationEmail } from "@/templates/email/MultipleTicketsConfirmationEmail";
 
 interface TripData {
   id: string;
@@ -78,6 +79,61 @@ export class EmailService {
       console.error("Error sending email:", error);
       // Don't throw - email failure shouldn't block the transaction in production
       // But re-throw in test mode so we can see the error
+      if (process.env.NODE_ENV === "test" || process.env.DEBUG_EMAIL === "true") {
+        throw error;
+      }
+    }
+  }
+
+  async sendMultipleTicketsConfirmation(
+    tickets: Array<{
+      ticket: Ticket;
+      trip: TripData;
+      seat: SeatData;
+    }>,
+    payment: PaymentData
+  ): Promise<{ id: string } | undefined> {
+    try {
+      const fromEmail = process.env.RESEND_FROM_EMAIL || "noreply@tdp.com";
+      
+      // Use the first ticket's email, or find a ticket with an email
+      const ticketWithEmail = tickets.find((t) => t.ticket.passengerEmail);
+      const toEmail = ticketWithEmail?.ticket.passengerEmail;
+
+      if (!toEmail) {
+        console.warn("No email provided for any ticket in bulk purchase");
+        return;
+      }
+
+      // Generate email HTML for multiple tickets
+      const html = await MultipleTicketsConfirmationEmail({
+        tickets: tickets.map((t) => ({
+          ticket: t.ticket,
+          trip: t.trip,
+          seat: t.seat,
+        })),
+        payment,
+      });
+
+      const result = await this.resend.emails.send({
+        from: fromEmail,
+        to: toEmail,
+        subject: `Confirmación de ${tickets.length} ${tickets.length === 1 ? "Boleto" : "Boletos"} - ${tickets[0].trip.route.origin} → ${tickets[0].trip.route.destination}`,
+        html,
+      });
+
+      if (result.error) {
+        console.error("Resend API error:", result.error);
+        throw new Error(`Failed to send email: ${JSON.stringify(result.error)}`);
+      }
+
+      console.log(`Email sent successfully to ${toEmail} for ${tickets.length} ticket(s)`);
+      console.log(`Email ID: ${result.data?.id || "N/A"}`);
+      
+      return result.data;
+    } catch (error) {
+      console.error("Error sending multiple tickets email:", error);
+      // Don't throw - email failure shouldn't block the transaction in production
       if (process.env.NODE_ENV === "test" || process.env.DEBUG_EMAIL === "true") {
         throw error;
       }

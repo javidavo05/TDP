@@ -834,7 +834,7 @@ export function SeatMapEditor({
 
           <div className="border-t border-border pt-4">
             <p className="text-sm text-muted-foreground">
-              💡 <strong>Tip:</strong> Usa el botón "Modo Elementos" en el toolbar para editar conductor y puertas directamente en el canvas. 
+              💡 <strong>Tip:</strong> Usa el botón &quot;Modo Elementos&quot; en el toolbar para editar conductor y puertas directamente en el canvas. 
               Arrastra para mover y usa la esquina inferior derecha para redimensionar.
             </p>
           </div>

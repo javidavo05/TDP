@@ -13,6 +13,8 @@ interface SeatSelectionModalProps {
   totalSeats: number;
   onSelect: (seatId: string) => void;
   onClose: () => void;
+  selectedSeatIds?: string[]; // Allow multiple selections
+  allowMultiple?: boolean; // Enable multiple seat selection
 }
 
 interface SeatWithStatus extends Seat {
@@ -27,11 +29,18 @@ export function SeatSelectionModal({
   totalSeats,
   onSelect,
   onClose,
+  selectedSeatIds = [],
+  allowMultiple = true,
 }: SeatSelectionModalProps) {
   const [seats, setSeats] = useState<SeatWithStatus[]>([]);
-  const [selectedSeatId, setSelectedSeatId] = useState<string | null>(null);
+  const [internalSelectedSeatIds, setInternalSelectedSeatIds] = useState<string[]>(selectedSeatIds);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Sync with external selectedSeatIds prop
+  useEffect(() => {
+    setInternalSelectedSeatIds(selectedSeatIds);
+  }, [selectedSeatIds]);
 
   useEffect(() => {
     fetchSeats();
@@ -71,17 +80,25 @@ export function SeatSelectionModal({
   const handleSeatClick = (seatId: string) => {
     const seat = seats.find((s) => s.id === seatId);
     if (seat && seat.isAvailable) {
-      setSelectedSeatId(seatId);
-      // Immediately notify parent of selection for real-time sync with secondary display
-      onSelect(seatId);
+      if (allowMultiple) {
+        // Toggle selection
+        const newSelected = internalSelectedSeatIds.includes(seatId)
+          ? internalSelectedSeatIds.filter((id) => id !== seatId)
+          : [...internalSelectedSeatIds, seatId];
+        setInternalSelectedSeatIds(newSelected);
+        // Notify parent of each selection change
+        onSelect(seatId);
+      } else {
+        // Single selection mode
+        setInternalSelectedSeatIds([seatId]);
+        onSelect(seatId);
+      }
     }
   };
 
   const handleConfirm = () => {
-    if (selectedSeatId) {
-      // onSelect was already called when seat was clicked, just close modal
-      onClose();
-    }
+    // Modal will close, selections are already synced
+    onClose();
   };
 
   // Calculate canvas dimensions
@@ -90,7 +107,7 @@ export function SeatSelectionModal({
   const scale = Math.min(1, 1000 / maxX, 700 / maxY);
 
   const getSeatColor = (seat: SeatWithStatus): string => {
-    if (seat.id === selectedSeatId) {
+    if (internalSelectedSeatIds.includes(seat.id)) {
       return "bg-blue-500 text-white ring-4 ring-blue-300";
     }
     if (seat.status === "sold") {
@@ -192,15 +209,27 @@ export function SeatSelectionModal({
           <div className="space-y-4">
             <SeatLegend />
             
-            {selectedSeatId && (
+            {internalSelectedSeatIds.length > 0 && (
               <div className="bg-primary/10 border-2 border-primary rounded-xl p-4">
-                <p className="text-sm font-semibold mb-2">Asiento Seleccionado:</p>
-                <p className="text-2xl font-bold text-primary">
-                  {seats.find((s) => s.id === selectedSeatId)?.number || "N/A"}
+                <p className="text-sm font-semibold mb-2">
+                  {allowMultiple ? "Asientos Seleccionados:" : "Asiento Seleccionado:"}
+                </p>
+                <div className="space-y-2 mb-4">
+                  {internalSelectedSeatIds.map((seatId) => {
+                    const seat = seats.find((s) => s.id === seatId);
+                    return (
+                      <p key={seatId} className="text-xl font-bold text-primary">
+                        {seat?.number || "N/A"}
+                      </p>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-muted-foreground mb-4">
+                  {internalSelectedSeatIds.length} {internalSelectedSeatIds.length === 1 ? "asiento seleccionado" : "asientos seleccionados"}
                 </p>
                 <Button
                   onClick={handleConfirm}
-                  className="w-full mt-4"
+                  className="w-full"
                   size="lg"
                 >
                   <Check className="w-4 h-4 mr-2" />

@@ -14,6 +14,7 @@ interface DisplayState {
   availableSeats?: number;
   totalSeats?: number;
   selectedSeatId?: string | null;
+  selectedSeatIds?: string[]; // Support multiple selected seats
 }
 
 interface AdvertisingItem {
@@ -146,6 +147,7 @@ export default function SecondaryDisplayPage() {
           availableSeats={displayState.availableSeats || 0}
           totalSeats={displayState.totalSeats || 0}
           selectedSeatId={displayState.selectedSeatId || null}
+          selectedSeatIds={displayState.selectedSeatIds || []}
           onSelect={() => {
             // Seat selection is handled in the main POS modal
             // This view is just for display purposes

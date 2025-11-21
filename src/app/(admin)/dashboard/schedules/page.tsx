@@ -673,8 +673,8 @@ export default function SchedulesPage() {
                                   : "Modo edición activo - Arrastra un bus aquí para crear el horario"
                                 : "Selecciona una ruta arriba para poder asignar buses"
                               : schedule
-                                ? "Haz clic en 'Editar' para asignar buses"
-                                : "Haz clic en 'Crear Horario' para activar"}
+                                ? "Haz clic en &apos;Editar&apos; para asignar buses"
+                                : "Haz clic en &apos;Crear Horario&apos; para activar"}
                           </div>
                         )}
                       </div>
@@ -697,7 +697,7 @@ export default function SchedulesPage() {
             </div>
             {!editingScheduleId && !editingHour && (
               <div className="mb-4 p-3 bg-muted/50 border border-border rounded-lg text-sm text-muted-foreground">
-                Selecciona un horario y haz clic en "Editar" o "Crear Horario" para activar el modo de asignación
+                Selecciona un horario y haz clic en &quot;Editar&quot; o &quot;Crear Horario&quot; para activar el modo de asignación
               </div>
             )}
             <div className="space-y-2 max-h-[calc(100vh-300px)] overflow-y-auto">

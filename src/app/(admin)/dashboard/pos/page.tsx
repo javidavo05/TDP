@@ -86,22 +86,24 @@ interface Seat {
   isAvailable: boolean;
 }
 
-interface POSPageProps {
-  terminalId?: string;
-  sessionId?: string;
+interface Passenger {
+  id: string; // Unique ID for this passenger form
+  seatId: string;
+  name: string;
+  phone?: string;
+  documentId: string;
+  documentType: "cedula" | "pasaporte";
 }
 
-export default function POSPage(props: POSPageProps = {}) {
-  const { terminalId, sessionId } = props;
+export default function POSPage() {
+  const terminalId = undefined;
+  const sessionId = undefined;
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [selectedSchedule, setSelectedSchedule] = useState<Schedule | null>(null);
   const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
-  const [selectedSeat, setSelectedSeat] = useState<string | null>(null);
+  const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
+  const [passengers, setPassengers] = useState<Passenger[]>([]);
   const [displaySessionId, setDisplaySessionId] = useState<string | null>(null);
-  const [passengerName, setPassengerName] = useState("");
-  const [passengerPhone, setPassengerPhone] = useState("");
-  const [passengerDocumentId, setPassengerDocumentId] = useState("");
-  const [passengerDocumentType, setPassengerDocumentType] = useState<"cedula" | "pasaporte">("cedula");
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "card">("cash");
   const [receivedAmount, setReceivedAmount] = useState<number | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -172,13 +174,15 @@ export default function POSPage(props: POSPageProps = {}) {
         fetchBusForSchedule(selectedSchedule);
       } else {
         setSelectedTrip(null);
-        setSelectedSeat(null);
+        setSelectedSeats([]);
+        setPassengers([]);
       }
       // Update secondary display when schedule changes
       updateSecondaryDisplay(selectedSchedule);
     } else {
       setSelectedTrip(null);
-      setSelectedSeat(null);
+      setSelectedSeats([]);
+      setPassengers([]);
       updateSecondaryDisplay(null);
     }
   }, [selectedSchedule]);
@@ -191,7 +195,7 @@ export default function POSPage(props: POSPageProps = {}) {
     }
   }, [selectedTrip]);
 
-  // Update secondary display when seat selection modal opens/closes or seat is selected
+  // Update secondary display when seat selection modal opens/closes or seats are selected
   useEffect(() => {
     if (showSeatSelection && selectedTrip && selectedSchedule) {
       // Show seat selection on secondary display when modal is open
@@ -201,7 +205,7 @@ export default function POSPage(props: POSPageProps = {}) {
         busId: selectedTrip.bus?.id || "",
         availableSeats: selectedTrip.availableSeats || 0,
         totalSeats: selectedTrip.totalSeats || 0,
-        selectedSeatId: selectedSeat || null, // Include selected seat ID
+        selectedSeatIds: selectedSeats, // Include all selected seat IDs
       };
       localStorage.setItem("pos-secondary-display", JSON.stringify(state));
       const channel = new BroadcastChannel("pos-secondary-display");
@@ -215,7 +219,7 @@ export default function POSPage(props: POSPageProps = {}) {
       channel.postMessage(state);
       channel.close();
     }
-  }, [showSeatSelection, selectedTrip, selectedSchedule, selectedSeat]);
+  }, [showSeatSelection, selectedTrip, selectedSchedule, selectedSeats]);
 
   const fetchBusForSchedule = async (schedule: Schedule) => {
     setLoadingTrip(true);
@@ -314,7 +318,7 @@ export default function POSPage(props: POSPageProps = {}) {
   };
 
   const createDisplaySession = async () => {
-    if (!selectedTrip || !selectedSeat) return;
+    if (!selectedTrip || selectedSeats.length === 0) return;
 
     try {
       const response = await fetch("/api/pos/display/session", {
@@ -322,7 +326,7 @@ export default function POSPage(props: POSPageProps = {}) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           tripId: selectedTrip.id,
-          seatId: selectedSeat,
+          seatIds: selectedSeats,
         }),
       });
 
@@ -337,8 +341,24 @@ export default function POSPage(props: POSPageProps = {}) {
   };
 
   const processSale = async () => {
-    if (!selectedTrip || !selectedSeat || !passengerName || !passengerDocumentId || !selectedSchedule) {
-      alert("Por favor completa todos los campos requeridos (nombre y documento)");
+    // Validate that we have at least one passenger with complete information
+    if (!selectedTrip || selectedSeats.length === 0 || passengers.length === 0 || !selectedSchedule) {
+      alert("Por favor selecciona al menos un asiento y completa la información del pasajero");
+      return;
+    }
+
+    // Validate all passengers have required fields
+    const incompletePassengers = passengers.filter(
+      (p) => !p.name || !p.documentId
+    );
+    if (incompletePassengers.length > 0) {
+      alert("Por favor completa todos los campos requeridos (nombre y documento) para todos los pasajeros");
+      return;
+    }
+
+    // Validate that each passenger has a seat
+    if (passengers.length !== selectedSeats.length) {
+      alert("Cada pasajero debe tener un asiento asignado");
       return;
     }
 
@@ -347,8 +367,12 @@ export default function POSPage(props: POSPageProps = {}) {
       return;
     }
 
-    if (paymentMethod === "cash" && (!receivedAmount || receivedAmount < selectedTrip.price * 1.07)) {
-      alert("El monto recibido debe ser mayor o igual al precio del boleto (con ITBMS)");
+    // Calculate total amount (price per ticket * number of tickets)
+    const totalAmount = selectedTrip.price * passengers.length;
+    const totalWithITBMS = totalAmount * 1.07;
+
+    if (paymentMethod === "cash" && (!receivedAmount || receivedAmount < totalWithITBMS)) {
+      alert(`El monto recibido debe ser mayor o igual al total de ${totalWithITBMS.toFixed(2)} (con ITBMS)`);
       return;
     }
 
@@ -397,18 +421,22 @@ export default function POSPage(props: POSPageProps = {}) {
         }
       }
       
-      const totalAmount = selectedTrip.price;
-      const response = await fetch("/api/pos/tickets", {
+      // Prepare tickets data
+      const ticketsData = passengers.map((passenger) => ({
+        tripId: tripId,
+        seatId: passenger.seatId,
+        passengerName: passenger.name,
+        passengerPhone: passenger.phone || undefined,
+        passengerDocumentId: passenger.documentId,
+        passengerDocumentType: passenger.documentType,
+        destinationStopId: null, // TODO: Get from route stops
+      }));
+
+      const response = await fetch("/api/pos/tickets/bulk", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          tripId: tripId,
-          seatId: selectedSeat,
-          passengerName,
-          passengerPhone,
-          passengerDocumentId,
-          passengerDocumentType,
-          destinationStopId: null, // TODO: Get from route stops
+          tickets: ticketsData,
           paymentMethod,
           amount: totalAmount,
           terminalId: terminalId || "pos-1",
@@ -420,62 +448,62 @@ export default function POSPage(props: POSPageProps = {}) {
       if (response.ok) {
         const data = await response.json();
         
-        // Print thermal ticket (if Electron is available)
+        // Print thermal tickets (if Electron is available)
         try {
           if (typeof window !== "undefined" && (window as any).electron) {
-            const selectedSeatNumber = getSeats().find((s) => s.id === selectedSeat)?.number || "N/A";
-            await (window as any).electron.printTicket({
-              ticketId: data.ticket.id,
-              qrCode: data.ticket.qrCode,
-              passengerName: passengerName,
-              seatNumber: selectedSeatNumber,
-              origin: selectedTrip.route.origin,
-              destination: selectedTrip.route.destination,
-              departureTime: format(new Date(selectedTrip.departureTime), "dd/MM/yyyy HH:mm"),
-              price: selectedTrip.price,
-              itbms: selectedTrip.price * 0.07,
-              total: selectedTrip.price * 1.07,
-              ticketNumber: data.ticket.id.substring(0, 8).toUpperCase(),
-            });
+            for (const ticket of data.tickets) {
+              const seatNumber = getSeats().find((s) => s.id === ticket.seatId)?.number || "N/A";
+              const passenger = passengers.find((p) => p.seatId === ticket.seatId);
+              await (window as any).electron.printTicket({
+                ticketId: ticket.id,
+                qrCode: ticket.qrCode,
+                passengerName: passenger?.name || "",
+                seatNumber: seatNumber,
+                origin: selectedTrip.route.origin,
+                destination: selectedTrip.route.destination,
+                departureTime: format(new Date(selectedTrip.departureTime), "dd/MM/yyyy HH:mm"),
+                price: selectedTrip.price,
+                itbms: selectedTrip.price * 0.07,
+                total: selectedTrip.price * 1.07,
+                ticketNumber: ticket.id.substring(0, 8).toUpperCase(),
+              });
+            }
           }
         } catch (printError) {
-          console.error("Error printing ticket:", printError);
+          console.error("Error printing tickets:", printError);
         }
 
         // Print fiscal invoice (if Electron is available)
         try {
           if (typeof window !== "undefined" && (window as any).electron) {
             await (window as any).electron.sendToFiscal({
-              ticketId: data.ticket.id,
-              items: [{
-                description: `Boleto ${selectedTrip.route.origin} → ${selectedTrip.route.destination}`,
+              ticketId: data.transaction.id,
+              items: passengers.map((passenger) => ({
+                description: `Boleto ${selectedTrip.route.origin} → ${selectedTrip.route.destination} - Asiento ${getSeats().find((s) => s.id === passenger.seatId)?.number || "N/A"}`,
                 quantity: 1,
                 unitPrice: selectedTrip.price,
                 total: selectedTrip.price,
-              }],
-              subtotal: selectedTrip.price,
-              itbms: selectedTrip.price * 0.07,
-              total: selectedTrip.price * 1.07,
-              paymentMethod: "cash",
-              passengerName: passengerName,
-              passengerDocumentId: passengerDocumentId,
-              terminalId: "pos-1",
+              })),
+              subtotal: totalAmount,
+              itbms: totalAmount * 0.07,
+              total: totalWithITBMS,
+              paymentMethod: paymentMethod,
+              passengerName: passengers[0]?.name || "",
+              passengerDocumentId: passengers[0]?.documentId || "",
+              terminalId: terminalId || "pos-1",
             });
           }
         } catch (fiscalError) {
           console.error("Error printing fiscal invoice:", fiscalError);
         }
 
-        alert("✓ Venta procesada exitosamente");
+        alert(`✓ Venta procesada exitosamente - ${passengers.length} boleto(s) vendido(s)`);
         // Reset form
         setSelectedSchedule(null);
         setSelectedTrip(null);
-        setSelectedSeat(null);
+        setSelectedSeats([]);
+        setPassengers([]);
         setShowSeatSelection(false); // Close seat selection modal
-        setPassengerName("");
-        setPassengerPhone("");
-        setPassengerDocumentId("");
-        setPassengerDocumentType("cedula");
         setPaymentMethod("cash");
         setReceivedAmount(null);
         setDisplaySessionId(null);
@@ -550,13 +578,33 @@ export default function POSPage(props: POSPageProps = {}) {
 
 
   const handleSeatSelect = (seatId: string) => {
-    setSelectedSeat(seatId);
+    // Toggle seat selection - add if not selected, remove if already selected
+    setSelectedSeats((prev) => {
+      if (prev.includes(seatId)) {
+        // Remove seat and its associated passenger
+        const newSeats = prev.filter((id) => id !== seatId);
+        setPassengers((prevPassengers) => prevPassengers.filter((p) => p.seatId !== seatId));
+        return newSeats;
+      } else {
+        // Add seat and create passenger form
+        const newPassenger: Passenger = {
+          id: `passenger-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+          seatId,
+          name: "",
+          documentId: "",
+          documentType: "cedula",
+        };
+        setPassengers((prev) => [...prev, newPassenger]);
+        return [...prev, seatId];
+      }
+    });
   };
 
   const clearSelection = () => {
     setSelectedSchedule(null);
     setSelectedTrip(null);
-    setSelectedSeat(null);
+    setSelectedSeats([]);
+    setPassengers([]);
     setShowSeatSelection(false);
     updateSecondaryDisplay(null);
   };
@@ -568,9 +616,30 @@ export default function POSPage(props: POSPageProps = {}) {
   };
 
   const handleSeatSelectFromModal = (seatId: string) => {
-    setSelectedSeat(seatId);
-    // Don't close modal immediately - let user confirm
-    // Modal will close when user clicks confirm button
+    handleSeatSelect(seatId);
+    // Don't close modal immediately - let user select more seats or confirm
+  };
+
+  const addPassenger = () => {
+    // This will be called when user wants to add another passenger
+    // The seat selection will happen in the modal
+    if (selectedTrip && selectedSchedule) {
+      setShowSeatSelection(true);
+    }
+  };
+
+  const removePassenger = (passengerId: string) => {
+    const passenger = passengers.find((p) => p.id === passengerId);
+    if (passenger) {
+      setSelectedSeats((prev) => prev.filter((id) => id !== passenger.seatId));
+      setPassengers((prev) => prev.filter((p) => p.id !== passengerId));
+    }
+  };
+
+  const updatePassenger = (passengerId: string, updates: Partial<Passenger>) => {
+    setPassengers((prev) =>
+      prev.map((p) => (p.id === passengerId ? { ...p, ...updates } : p))
+    );
   };
 
   return (
@@ -657,79 +726,132 @@ export default function POSPage(props: POSPageProps = {}) {
                     </p>
                   </div>
 
-                  {selectedSeat && (
+                  {selectedSeats.length > 0 && (
                     <div>
-                      <p className="text-sm text-muted-foreground mb-1">Asiento</p>
-                      <p className="font-bold text-3xl text-primary">
-                        {getSeats().find((s) => s.id === selectedSeat)?.number || selectedSeat}
+                      <p className="text-sm text-muted-foreground mb-1">Asientos Seleccionados</p>
+                      <p className="font-bold text-2xl text-primary">
+                        {selectedSeats.map((seatId) => getSeats().find((s) => s.id === seatId)?.number || seatId).join(", ")}
+                      </p>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {selectedSeats.length} {selectedSeats.length === 1 ? "asiento" : "asientos"}
                       </p>
                     </div>
                   )}
 
                   <div>
-                    <p className="text-sm text-muted-foreground mb-1">Precio</p>
-                    <p className="font-bold text-3xl text-primary">
+                    <p className="text-sm text-muted-foreground mb-1">Precio por Boleto</p>
+                    <p className="font-bold text-xl text-primary">
                       ${selectedTrip.price.toFixed(2)}
                     </p>
+                    {selectedSeats.length > 0 && (
+                      <>
+                        <p className="text-sm text-muted-foreground mb-1 mt-2">Total ({selectedSeats.length} {selectedSeats.length === 1 ? "boleto" : "boletos"})</p>
+                        <p className="font-bold text-3xl text-primary">
+                          ${(selectedTrip.price * selectedSeats.length).toFixed(2)}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          ITBMS (7%): ${(selectedTrip.price * selectedSeats.length * 0.07).toFixed(2)}
+                        </p>
+                        <p className="text-sm font-semibold mt-1">
+                          Total con ITBMS: ${(selectedTrip.price * selectedSeats.length * 1.07).toFixed(2)}
+                        </p>
+                      </>
+                    )}
                   </div>
                 </div>
               )}
 
-              {selectedSeat && selectedTrip && (
+              {selectedSeats.length > 0 && selectedTrip && (
                 <div className="space-y-6 border-t-2 border-border pt-6">
-                  <div>
-                    <label className="block text-lg font-semibold mb-3">
-                      Nombre del Pasajero *
-                    </label>
-                    <input
-                      type="text"
-                      value={passengerName}
-                      onChange={(e) => setPassengerName(e.target.value)}
-                      className="w-full px-6 py-5 bg-background border-2 border-input rounded-xl text-xl font-semibold focus:outline-none focus:ring-2 focus:ring-primary min-h-[64px]"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-lg font-semibold mb-3">
-                      Teléfono (Opcional)
-                    </label>
-                    <input
-                      type="tel"
-                      value={passengerPhone}
-                      onChange={(e) => setPassengerPhone(e.target.value)}
-                      className="w-full px-6 py-5 bg-background border-2 border-input rounded-xl text-xl font-semibold focus:outline-none focus:ring-2 focus:ring-primary min-h-[64px]"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-lg font-semibold mb-3">
-                      Tipo de Documento *
-                    </label>
-                    <select
-                      value={passengerDocumentType}
-                      onChange={(e) => setPassengerDocumentType(e.target.value as "cedula" | "pasaporte")}
-                      className="w-full px-6 py-5 bg-background border-2 border-input rounded-xl text-xl font-semibold focus:outline-none focus:ring-2 focus:ring-primary min-h-[64px]"
-                      required
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-xl font-bold">Información de Pasajeros</h3>
+                    <TouchButton
+                      onClick={addPassenger}
+                      variant="secondary"
+                      size="sm"
+                      disabled={!selectedTrip || !selectedSchedule}
                     >
-                      <option value="cedula">Cédula</option>
-                      <option value="pasaporte">Pasaporte</option>
-                    </select>
+                      + Agregar Pasajero
+                    </TouchButton>
                   </div>
 
-                  <div>
-                    <label className="block text-lg font-semibold mb-3">
-                      {passengerDocumentType === "cedula" ? "Cédula" : "Pasaporte"} *
-                    </label>
-                    <input
-                      type="text"
-                      value={passengerDocumentId}
-                      onChange={(e) => setPassengerDocumentId(e.target.value)}
-                      placeholder={passengerDocumentType === "cedula" ? "8-1234-5678" : "A123456"}
-                      className="w-full px-6 py-5 bg-background border-2 border-input rounded-xl text-xl font-semibold focus:outline-none focus:ring-2 focus:ring-primary min-h-[64px]"
-                      required
-                    />
-                  </div>
+                  {passengers.map((passenger, index) => {
+                    const seatNumber = getSeats().find((s) => s.id === passenger.seatId)?.number || passenger.seatId;
+                    return (
+                      <div key={passenger.id} className="border-2 border-border rounded-xl p-6 bg-muted/30">
+                        <div className="flex items-center justify-between mb-4">
+                          <h4 className="text-lg font-semibold">
+                            Pasajero {index + 1} - Asiento {seatNumber}
+                          </h4>
+                          {passengers.length > 1 && (
+                            <TouchButton
+                              onClick={() => removePassenger(passenger.id)}
+                              variant="danger"
+                              size="sm"
+                            >
+                              Eliminar
+                            </TouchButton>
+                          )}
+                        </div>
+
+                        <div className="space-y-4">
+                          <div>
+                            <label className="block text-sm font-semibold mb-2">
+                              Nombre del Pasajero *
+                            </label>
+                            <input
+                              type="text"
+                              value={passenger.name}
+                              onChange={(e) => updatePassenger(passenger.id, { name: e.target.value })}
+                              className="w-full px-4 py-3 bg-background border-2 border-input rounded-lg text-lg font-semibold focus:outline-none focus:ring-2 focus:ring-primary min-h-[56px]"
+                              required
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-semibold mb-2">
+                              Teléfono (Opcional)
+                            </label>
+                            <input
+                              type="tel"
+                              value={passenger.phone || ""}
+                              onChange={(e) => updatePassenger(passenger.id, { phone: e.target.value })}
+                              className="w-full px-4 py-3 bg-background border-2 border-input rounded-lg text-lg font-semibold focus:outline-none focus:ring-2 focus:ring-primary min-h-[56px]"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-semibold mb-2">
+                              Tipo de Documento *
+                            </label>
+                            <select
+                              value={passenger.documentType}
+                              onChange={(e) => updatePassenger(passenger.id, { documentType: e.target.value as "cedula" | "pasaporte" })}
+                              className="w-full px-4 py-3 bg-background border-2 border-input rounded-lg text-lg font-semibold focus:outline-none focus:ring-2 focus:ring-primary min-h-[56px]"
+                              required
+                            >
+                              <option value="cedula">Cédula</option>
+                              <option value="pasaporte">Pasaporte</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-semibold mb-2">
+                              {passenger.documentType === "cedula" ? "Cédula" : "Pasaporte"} *
+                            </label>
+                            <input
+                              type="text"
+                              value={passenger.documentId}
+                              onChange={(e) => updatePassenger(passenger.id, { documentId: e.target.value })}
+                              placeholder={passenger.documentType === "cedula" ? "8-1234-5678" : "A123456"}
+                              className="w-full px-4 py-3 bg-background border-2 border-input rounded-lg text-lg font-semibold focus:outline-none focus:ring-2 focus:ring-primary min-h-[56px]"
+                              required
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
 
                   {/* Payment Method Selection */}
                   <div>
@@ -763,9 +885,9 @@ export default function POSPage(props: POSPageProps = {}) {
                   </div>
 
                   {/* Payment Amount Input */}
-                  {selectedTrip && (
+                  {selectedTrip && selectedSeats.length > 0 && (
                     <PaymentAmountInput
-                      totalAmount={selectedTrip.price * 1.07} // Price + 7% ITBMS
+                      totalAmount={selectedTrip.price * selectedSeats.length * 1.07} // Total price + 7% ITBMS
                       onAmountReceived={(amount, change) => {
                         setReceivedAmount(amount);
                       }}
@@ -778,22 +900,22 @@ export default function POSPage(props: POSPageProps = {}) {
                     onClick={processSale}
                     disabled={
                       isProcessing ||
-                      !passengerName ||
-                      !passengerDocumentId ||
-                      (paymentMethod === "cash" && (!receivedAmount || receivedAmount < (selectedTrip.price * 1.07)))
+                      passengers.length === 0 ||
+                      passengers.some((p) => !p.name || !p.documentId) ||
+                      (paymentMethod === "cash" && (!receivedAmount || receivedAmount < (selectedTrip.price * selectedSeats.length * 1.07)))
                     }
                     variant="success"
                     size="lg"
                     className="w-full"
                   >
-                    {isProcessing ? "Procesando..." : "Procesar Venta"}
+                    {isProcessing ? "Procesando..." : `Procesar Venta (${passengers.length} ${passengers.length === 1 ? "boleto" : "boletos"})`}
                   </TouchButton>
                 </div>
               )}
 
-              {!selectedSeat && selectedTrip && (
+              {selectedSeats.length === 0 && selectedTrip && (
                 <div className="text-center py-8 text-muted-foreground text-lg">
-                  Selecciona un asiento para continuar
+                  Selecciona al menos un asiento para continuar
                 </div>
               )}
 
@@ -825,6 +947,8 @@ export default function POSPage(props: POSPageProps = {}) {
           onClose={() => {
             setShowSeatSelection(false);
           }}
+          selectedSeatIds={selectedSeats}
+          allowMultiple={true}
         />
       )}
 

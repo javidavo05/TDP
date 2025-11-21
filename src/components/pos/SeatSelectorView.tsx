@@ -11,6 +11,7 @@ interface SeatSelectorViewProps {
   totalSeats: number;
   onSelect: (seatId: string) => void;
   selectedSeatId?: string | null; // External selected seat ID (for display only)
+  selectedSeatIds?: string[]; // External selected seat IDs (for display only)
   className?: string;
 }
 
@@ -26,6 +27,7 @@ export function SeatSelectorView({
   totalSeats,
   onSelect,
   selectedSeatId: externalSelectedSeatId = null,
+  selectedSeatIds: externalSelectedSeatIds = [],
   className = "",
 }: SeatSelectorViewProps) {
   const [seats, setSeats] = useState<SeatWithStatus[]>([]);
@@ -33,23 +35,29 @@ export function SeatSelectorView({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  // Use external selected seat ID if provided, otherwise use internal state
-  // Always prioritize external selected seat ID when it's provided (even if it's an empty string, treat null/undefined as not provided)
-  const selectedSeatId = externalSelectedSeatId !== null && externalSelectedSeatId !== undefined 
-    ? externalSelectedSeatId 
-    : internalSelectedSeatId;
+  // Use external selected seat IDs if provided, otherwise use internal state
+  // Prioritize externalSelectedSeatIds array, then externalSelectedSeatId, then internal state
+  const selectedSeatIds = externalSelectedSeatIds.length > 0
+    ? externalSelectedSeatIds
+    : externalSelectedSeatId !== null && externalSelectedSeatId !== undefined
+    ? [externalSelectedSeatId]
+    : internalSelectedSeatId
+    ? [internalSelectedSeatId]
+    : [];
 
   useEffect(() => {
     fetchSeats();
   }, [tripId]);
 
-  // Update when external selected seat ID changes
+  // Update when external selected seat IDs change
   useEffect(() => {
-    if (externalSelectedSeatId !== null && externalSelectedSeatId !== undefined) {
+    if (externalSelectedSeatIds.length > 0 || (externalSelectedSeatId !== null && externalSelectedSeatId !== undefined)) {
       // External selection takes priority - clear internal selection
       setInternalSelectedSeatId(null);
+    } else {
+      setInternalSelectedSeatId(null);
     }
-  }, [externalSelectedSeatId]);
+  }, [externalSelectedSeatIds, externalSelectedSeatId]);
 
   const fetchSeats = async () => {
     try {
@@ -100,9 +108,9 @@ export function SeatSelectorView({
   const scale = Math.min(1, 1000 / maxX, 700 / maxY);
 
   const getSeatColor = (seat: SeatWithStatus): string => {
-    // Check if this seat is selected (prioritize external selection)
-    if (selectedSeatId && seat.id === selectedSeatId) {
-      return "bg-blue-500 text-white ring-4 ring-blue-300 ring-offset-2";
+    // Check if this seat is selected (support multiple selections)
+    if (selectedSeatIds.includes(seat.id)) {
+      return "bg-blue-500 text-white ring-4 ring-blue-300 ring-offset-2 z-10 scale-110";
     }
     if (seat.status === "sold") {
       return "bg-red-500 text-white cursor-not-allowed opacity-75";
@@ -156,16 +164,17 @@ export function SeatSelectorView({
 
                 {/* Seats */}
                 {seats.map((seat) => {
-                  // If external selected seat ID is provided, disable all interactions (view-only mode)
-                  const isViewOnly = externalSelectedSeatId !== null;
+                  // If external selected seat IDs are provided, disable all interactions (view-only mode)
+                  const isViewOnly = externalSelectedSeatIds.length > 0 || (externalSelectedSeatId !== null && externalSelectedSeatId !== undefined);
                   const isClickable = !isViewOnly && seat.isAvailable && seat.status !== "sold";
+                  const isSelected = selectedSeatIds.includes(seat.id);
                   
                   return (
                     <button
                       key={seat.id}
                       onClick={() => isClickable && handleSeatClick(seat.id)}
                       disabled={!isClickable || isViewOnly}
-                      className={`absolute ${getSeatSize(seat)} ${getSeatColor(seat)} rounded transition-all duration-200 flex items-center justify-center text-xs font-semibold shadow-md ${isViewOnly ? '' : 'hover:shadow-lg hover:scale-110'} disabled:hover:scale-100 disabled:cursor-not-allowed ${seat.id === selectedSeatId ? 'z-10 scale-110' : ''}`}
+                      className={`absolute ${getSeatSize(seat)} ${getSeatColor(seat)} rounded transition-all duration-200 flex items-center justify-center text-xs font-semibold shadow-md ${isViewOnly ? '' : 'hover:shadow-lg hover:scale-110'} disabled:hover:scale-100 disabled:cursor-not-allowed`}
                       style={{
                         left: `${seat.x * scale}px`,
                         top: `${seat.y * scale}px`,
@@ -175,6 +184,8 @@ export function SeatSelectorView({
                           ? "Vendido"
                           : seat.status === "disabled"
                           ? "Discapacidad"
+                          : isSelected
+                          ? "Seleccionado"
                           : "Disponible"
                       }`}
                     >
