@@ -18,7 +18,7 @@ const CACHE_TTL = 30000; // 30 seconds
 export async function GET() {
   try {
     // Try cache first
-    const cached = cache.get<any>(CACHE_KEY);
+    const cached = cache.get(CACHE_KEY) as any;
     if (cached) {
       return NextResponse.json({ trips: cached }, {
         headers: {
