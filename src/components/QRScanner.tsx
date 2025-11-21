@@ -46,6 +46,7 @@ export function QRScanner({
   const containerRef = useRef<HTMLDivElement>(null);
   const isInitializedRef = useRef(false);
   const hasScannedRef = useRef(false);
+  const containerIdRef = useRef<string>(`qr-reader-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
 
   // Use refs for callbacks to avoid re-renders
   const onScanSuccessRef = useRef(onScanSuccess);
@@ -70,13 +71,48 @@ export function QRScanner({
       return;
     }
 
+    // Stop any existing scanners first
+    stopAllVideoTracks();
+    
+    // Clean up any existing content in the container
+    if (containerRef.current) {
+      containerRef.current.innerHTML = "";
+    }
+
+    // Ensure container has a unique ID
+    const containerId = containerIdRef.current;
+    if (containerRef.current) {
+      containerRef.current.id = containerId;
+    }
+
     isInitializedRef.current = true;
-    const scanner = new Html5Qrcode(containerRef.current.id);
+    const scanner = new Html5Qrcode(containerId);
     let isScanning = false;
+    let isCleanedUp = false;
+
+    // Function to stop scanner and camera
+    const stopScanner = async () => {
+      if (isCleanedUp) return;
+      
+      if (scannerRef.current) {
+        try {
+          await scannerRef.current.stop();
+        } catch (err) {
+          // Ignore errors - scanner might already be stopped
+        }
+        scannerRef.current = null;
+      }
+      // Always stop video tracks to ensure camera is off
+      stopAllVideoTracks();
+      setScanning(false);
+      isScanning = false;
+      isInitializedRef.current = false;
+      hasScannedRef.current = false;
+    };
 
     const startScanning = async () => {
       // Prevent multiple starts
-      if (isScanning) return;
+      if (isScanning || isCleanedUp) return;
       isScanning = true;
 
       try {
@@ -88,7 +124,7 @@ export function QRScanner({
           },
           async (decodedText) => {
             // Prevent processing the same QR code multiple times
-            if (hasScannedRef.current) {
+            if (hasScannedRef.current || isCleanedUp) {
               return;
             }
             hasScannedRef.current = true;
@@ -117,7 +153,7 @@ export function QRScanner({
           (errorMessage) => {
             // Only log errors, don't call callback for every scan error
             // "NotFoundException" is normal during scanning and should be ignored
-            if (errorMessage && !errorMessage.includes("NotFoundException")) {
+            if (errorMessage && !errorMessage.includes("NotFoundException") && !isCleanedUp) {
               console.warn("QR Scanner error:", errorMessage);
             }
           }
@@ -130,40 +166,29 @@ export function QRScanner({
         isInitializedRef.current = false;
         const errorMessage = (err as Error).message;
         setError(errorMessage);
-        if (onScanErrorRef.current) {
+        if (onScanErrorRef.current && !isCleanedUp) {
           onScanErrorRef.current(errorMessage);
         }
       }
     };
 
-    startScanning();
-
-    // Function to stop scanner and camera
-    const stopScanner = async () => {
-      if (scannerRef.current) {
-        try {
-          await scannerRef.current.stop();
-        } catch (err) {
-          // Ignore errors - scanner might already be stopped
-        }
-        scannerRef.current = null;
+    // Start scanning after a small delay to ensure DOM is ready
+    const timeoutId = setTimeout(() => {
+      if (!isCleanedUp) {
+        startScanning();
       }
-      // Always stop video tracks to ensure camera is off
-      stopAllVideoTracks();
-      setScanning(false);
-      isScanning = false;
-      isInitializedRef.current = false;
-      hasScannedRef.current = false;
-    };
+    }, 100);
 
     // Handle page unload (closing tab/window)
     const handleBeforeUnload = () => {
+      isCleanedUp = true;
       stopScanner();
     };
 
     // Handle page visibility change (tab hidden/visible)
     const handleVisibilityChange = () => {
       if (document.hidden) {
+        isCleanedUp = true;
         stopScanner();
       }
     };
@@ -174,19 +199,26 @@ export function QRScanner({
 
     // Cleanup function
     return () => {
+      isCleanedUp = true;
+      clearTimeout(timeoutId);
+      
       // Remove event listeners
       window.removeEventListener("beforeunload", handleBeforeUnload);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
 
       // Stop scanner immediately
-      stopScanner();
+      stopScanner().then(() => {
+        // Clear the container HTML after stopping
+        if (containerRef.current) {
+          containerRef.current.innerHTML = "";
+        }
+      });
     };
-  }, [fps, qrbox]); // Removed callbacks from dependencies to prevent re-renders
+  }, []); // Empty dependencies - only run once on mount
 
   return (
     <div className="w-full">
       <div
-        id="qr-reader"
         ref={containerRef}
         className="w-full max-w-md mx-auto"
       />
