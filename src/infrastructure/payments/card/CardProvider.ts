@@ -14,12 +14,7 @@ export class CardProvider implements IPaymentProvider {
       phone?: string;
     };
     metadata?: Record<string, unknown>;
-  }): Promise<{
-    status: PaymentStatus;
-    transactionId?: string;
-    error?: string;
-    metadata?: Record<string, unknown>;
-  }> {
+  }): Promise<PaymentProviderResponse> {
     if (this.isSimulated) {
       // Simulate card payment processing
       // In production, this would integrate with the physical POS terminal
@@ -51,11 +46,7 @@ export class CardProvider implements IPaymentProvider {
     throw new Error("Real POS terminal integration not yet implemented");
   }
 
-  async verifyPayment(transactionId: string): Promise<{
-    status: PaymentStatus;
-    transactionId: string;
-    metadata?: Record<string, unknown>;
-  }> {
+  async verifyPayment(transactionId: string): Promise<PaymentProviderResponse> {
     // In production, verify with POS terminal or payment processor
       return {
         status: "completed",
