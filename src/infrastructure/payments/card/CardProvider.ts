@@ -2,6 +2,7 @@ import { IPaymentProvider } from "@/domain/interfaces";
 import { PaymentMethod, PaymentStatus, PaymentProviderResponse } from "@/domain/types";
 
 export class CardProvider implements IPaymentProvider {
+  method: PaymentMethod = "card";
   private isSimulated: boolean = true; // Set to false when integrating real POS terminal
 
   async initiatePayment(data: {
