@@ -198,6 +198,8 @@ export default function TerminalPOSPage() {
 
 // Wrapper component that provides session context to POSPage
 function POSPageWithSession({ params }: { params: { terminalId: string; sessionId: string } }) {
-  return <POSPage params={params} />;
+  // POSPage doesn't accept props, it reads from URL params directly
+  // So we just render it without passing props
+  return <POSPage />;
 }
 
