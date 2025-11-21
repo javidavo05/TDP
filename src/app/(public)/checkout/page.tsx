@@ -166,12 +166,12 @@ function CheckoutContent() {
         return;
       }
 
-      // Process payment for other methods
+      // Process payment for other methods (using first ticket ID)
       const paymentResponse = await fetch("/api/public/payments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ticketId: ticketData.ticket.id,
+          ticketId: ticketDataArray[0].ticket.id,
           paymentMethod: formData.paymentMethod,
           customerInfo: {
             name: formData.passengerName,
