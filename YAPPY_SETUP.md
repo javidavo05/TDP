@@ -11,8 +11,8 @@ Agrega las siguientes variables a tu archivo `.env.local` o `.env`:
 YAPPY_MERCHANT_ID=MVZQO-44905104
 YAPPY_SECRET_KEY=WVBfODgwRTBCQkItNjBEOS0zQzlBLUIzMTAtNzc2MzA1Q0RCRkY2
 YAPPY_BUTTON_API_URL=https://apipagosbg.bgeneral.cloud
-YAPPY_DOMAIN=https://tdp-eosin.vercel.app
-YAPPY_WEBHOOK_URL=https://tdp-eosin.vercel.app/api/yappy/button/ipn
+YAPPY_DOMAIN=https://pimetransport.com
+YAPPY_WEBHOOK_URL=https://pimetransport.com/api/yappy/button/ipn
 
 # Para el frontend (componente web)
 NEXT_PUBLIC_YAPPY_MERCHANT_ID=MVZQO-44905104
@@ -23,8 +23,8 @@ NEXT_PUBLIC_YAPPY_MERCHANT_ID=MVZQO-44905104
 - **YAPPY_MERCHANT_ID**: `MVZQO-44905104` (ID de comercio)
 - **YAPPY_SECRET_KEY**: `WVBfODgwRTBCQkItNjBEOS0zQzlBLUIzMTAtNzc2MzA1Q0RCRkY2` (Clave secreta)
 - **YAPPY_BUTTON_API_URL**: `https://apipagosbg.bgeneral.cloud` (URL de API para Botón de Pago - Producción)
-- **YAPPY_DOMAIN**: `https://tdp-eosin.vercel.app` (Dominio configurado en Yappy Comercial)
-- **YAPPY_WEBHOOK_URL**: `https://tdp-eosin.vercel.app/api/yappy/button/ipn` (URL del IPN)
+- **YAPPY_DOMAIN**: `https://pimetransport.com` (Dominio configurado en Yappy Comercial)
+- **YAPPY_WEBHOOK_URL**: `https://pimetransport.com/api/yappy/button/ipn` (URL del IPN)
 - **NEXT_PUBLIC_YAPPY_MERCHANT_ID**: `MVZQO-44905104` (Para el componente web del frontend)
 
 ### URLs de API según Ambiente
@@ -54,10 +54,10 @@ El IPN URL se configura en el portal de Yappy Comercial cuando creas el Botón d
 
 #### URL de Producción:
 ```env
-YAPPY_WEBHOOK_URL=https://tdp-eosin.vercel.app/api/yappy/button/ipn
+YAPPY_WEBHOOK_URL=https://pimetransport.com/api/yappy/button/ipn
 ```
 
-**✅ Configurado para este proyecto**: `https://tdp-eosin.vercel.app/api/yappy/button/ipn`
+**✅ Configurado para este proyecto**: `https://pimetransport.com/api/yappy/button/ipn`
 
 ### Configurar el Botón de Pago en el Portal de Yappy Comercial
 
@@ -66,7 +66,7 @@ YAPPY_WEBHOOK_URL=https://tdp-eosin.vercel.app/api/yappy/button/ipn
 3. Ve a **"Métodos de cobro"** → **"Botón de Pago Yappy"**
 4. Selecciona una plataforma de desarrollo propio (Node.JS)
 5. Llena los datos:
-   - **URL del sitio**: `https://tdp-eosin.vercel.app`
+   - **URL del sitio**: `https://pimetransport.com`
    - Haz clic en **"Activar"**
 6. Genera tu clave secreta haciendo clic en **"Generar clave secreta"**
 7. Copia las credenciales:

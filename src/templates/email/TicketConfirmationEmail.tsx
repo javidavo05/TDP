@@ -195,7 +195,7 @@ export async function TicketConfirmationEmail({
               <!-- Support -->
               <div style="text-align: center; padding-top: 24px; border-top: 1px solid #e5e7eb;">
                 <p style="margin: 0 0 8px; color: #6b7280; font-size: 14px;"><strong>¿Necesitas ayuda?</strong></p>
-                <p style="margin: 0 0 4px; color: #6b7280; font-size: 14px;">Contáctanos en <a href="mailto:soporte@tdp.com" style="color: #3b82f6; text-decoration: none;">soporte@tdp.com</a></p>
+                <p style="margin: 0 0 4px; color: #6b7280; font-size: 14px;">Contáctanos en <a href="mailto:soporte@pimetransport.com" style="color: #3b82f6; text-decoration: none;">soporte@pimetransport.com</a></p>
                 <p style="margin: 0; color: #6b7280; font-size: 14px;">Teléfono: +507 6000-0000</p>
               </div>
             </td>

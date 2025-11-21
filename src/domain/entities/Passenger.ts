@@ -11,7 +11,11 @@ export class Passenger {
     public dateOfBirth: Date | null,
     public address: string | null,
     public createdAt: Date,
-    public updatedAt: Date
+    public updatedAt: Date,
+    public userId?: string | null,
+    public totalTrips?: number,
+    public loyaltyPoints?: number,
+    public loyaltyTier?: string
   ) {}
 
   static create(data: {

@@ -57,6 +57,7 @@ export default function SchedulesPage() {
   const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null);
   const [editingHour, setEditingHour] = useState<number | null>(null);
   const [selectedRouteForHour, setSelectedRouteForHour] = useState<Record<number, string>>({});
+  const [selectedScheduleForHour, setSelectedScheduleForHour] = useState<Record<number, string>>({});
   const [modifyingAssignment, setModifyingAssignment] = useState<ScheduleAssignment | null>(null);
   const [modifyReason, setModifyReason] = useState("");
   const [selectedNewBusId, setSelectedNewBusId] = useState<string>("");
@@ -79,6 +80,15 @@ export default function SchedulesPage() {
       fetchTrips();
     }
   }, [selectedRoute, selectedDate, schedules]);
+
+  // Close any open editing when date changes
+  useEffect(() => {
+    setEditingScheduleId(null);
+    setEditingHour(null);
+    setDragOverScheduleId(null);
+    setSelectedRouteForHour({});
+    setSelectedScheduleForHour({});
+  }, [selectedDate]);
 
   const fetchRoutes = async () => {
     try {
@@ -449,6 +459,14 @@ export default function SchedulesPage() {
     return "bus-no-trip";
   };
 
+  // Helper to get route name for a schedule
+  const getRouteNameForSchedule = (scheduleId: string): string => {
+    const schedule = schedules.find(s => s.id === scheduleId);
+    if (!schedule) return "";
+    const route = routes.find(r => r.id === schedule.routeId);
+    return route ? `${route.origin} → ${route.destination}` : "";
+  };
+
   // Generate all 24 hours
   const hours = Array.from({ length: 24 }, (_, i) => i);
 
@@ -527,33 +545,40 @@ export default function SchedulesPage() {
             <h2 className="text-xl font-semibold mb-4">Horarios (00:00 - 23:00)</h2>
             <div className="space-y-2 max-h-[calc(100vh-300px)] overflow-y-auto">
               {hours.map((hour) => {
-                const schedule = schedules.find((s) => s.hour === hour);
-                const scheduleAssignments = schedule
-                  ? getAssignmentsForSchedule(schedule.id)
+                // Get all schedules for this hour (multiple routes possible)
+                const hourSchedules = schedules.filter((s) => s.hour === hour);
+                const hasSchedules = hourSchedules.length > 0;
+                
+                // Determine which schedule we're working with
+                const activeScheduleId = selectedScheduleForHour[hour] || (hourSchedules.length === 1 ? hourSchedules[0].id : null);
+                const activeSchedule = activeScheduleId ? hourSchedules.find(s => s.id === activeScheduleId) : null;
+                
+                const scheduleAssignments = activeSchedule
+                  ? getAssignmentsForSchedule(activeSchedule.id)
                   : [];
 
-                const isEditing = schedule 
-                  ? editingScheduleId === schedule.id 
+                const isEditing = activeSchedule 
+                  ? editingScheduleId === activeSchedule.id 
                   : editingHour === hour;
-                const routeSelected = schedule ? true : !!selectedRouteForHour[hour];
+                const routeSelected = activeSchedule ? true : !!selectedRouteForHour[hour];
                 const canDrop = isEditing && draggedBus && routeSelected;
                 
                 // Get trip status for visual feedback
-                const tripStatus = getScheduleTripStatus(schedule?.id || null, hour);
+                const tripStatus = getScheduleTripStatus(activeSchedule?.id || null, hour);
 
                 return (
                   <div
                     key={hour}
                     onDragOver={(e) => {
                       if (canDrop) {
-                        handleDragOver(e, schedule?.id || null);
+                        handleDragOver(e, activeSchedule?.id || null);
                       }
                     }}
                     onDragLeave={handleDragLeave}
                     onDrop={async (e) => {
                       if (canDrop && draggedBus && routeSelected) {
-                        if (schedule) {
-                          await handleDrop(e, schedule.id);
+                        if (activeSchedule) {
+                          await handleDrop(e, activeSchedule.id);
                         } else {
                           // Create schedule first, then assign bus
                           await handleCreateScheduleAndAssign(hour, draggedBus.id);
@@ -563,12 +588,12 @@ export default function SchedulesPage() {
                       }
                     }}
                     className={`p-4 border rounded-lg transition-all ${
-                      schedule 
+                      activeSchedule 
                         ? isEditing
-                          ? dragOverScheduleId === schedule.id
+                          ? dragOverScheduleId === activeSchedule.id
                             ? "border-primary border-2 bg-primary/20 scale-105 shadow-lg"
                             : "border-primary border-2 bg-primary/10"
-                          : dragOverScheduleId === schedule.id
+                          : dragOverScheduleId === activeSchedule.id
                             ? "border-primary/50 bg-primary/5"
                             : tripStatus === "trip-generated"
                               ? "border-success border-2 bg-success/10"
@@ -583,28 +608,59 @@ export default function SchedulesPage() {
                         <span className="font-semibold">
                           {hour.toString().padStart(2, "0")}:00
                         </span>
+                        {/* Show route selector if multiple schedules exist */}
+                        {hourSchedules.length > 1 && (
+                          <select
+                            value={activeScheduleId || ""}
+                            onChange={(e) => {
+                              setSelectedScheduleForHour({
+                                ...selectedScheduleForHour,
+                                [hour]: e.target.value,
+                              });
+                              // Clear editing when switching schedules
+                              setEditingScheduleId(null);
+                              setEditingHour(null);
+                            }}
+                            className="px-2 py-1 bg-background border border-input rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                          >
+                            {hourSchedules.map((s) => {
+                              const route = routes.find(r => r.id === s.routeId);
+                              return (
+                                <option key={s.id} value={s.id}>
+                                  {route ? `${route.origin} → ${route.destination}` : `Ruta ${s.routeId}`} {s.isExpress ? "(Expreso)" : ""}
+                                </option>
+                              );
+                            })}
+                          </select>
+                        )}
+                        {/* Show route name if single schedule */}
+                        {hourSchedules.length === 1 && activeSchedule && (
+                          <span className="text-xs text-muted-foreground">
+                            {getRouteNameForSchedule(activeSchedule.id)}
+                          </span>
+                        )}
                         {/* Trip status indicator */}
-                        {schedule && tripStatus === "trip-generated" && (
+                        {activeSchedule && tripStatus === "trip-generated" && (
                           <span className="px-2 py-0.5 bg-success text-success-foreground rounded text-xs font-medium flex items-center gap-1">
                             <span>✓</span>
                             <span>Trip Generado</span>
                           </span>
                         )}
-                        {schedule && tripStatus === "bus-no-trip" && (
+                        {activeSchedule && tripStatus === "bus-no-trip" && (
                           <span className="px-2 py-0.5 bg-warning text-warning-foreground rounded text-xs font-medium">
                             Bus sin Trip
                           </span>
                         )}
-                        {schedule ? (
+                        {activeSchedule ? (
                           <>
                             <span
                               className={`px-2 py-1 rounded text-xs ${
-                                schedule.isExpress
+                                activeSchedule.isExpress
                                   ? "bg-orange-500/20 text-orange-500"
                                   : "bg-blue-500/20 text-blue-500"
                               }`}
                             >
-                              {schedule.isExpress ? "Expreso" : "Normal"}
+                              {activeSchedule.isExpress ? "Expreso" : "Normal"}
                             </span>
                             <button
                               onClick={() => {
@@ -613,7 +669,7 @@ export default function SchedulesPage() {
                                   setEditingHour(null);
                                   setDragOverScheduleId(null);
                                 } else {
-                                  setEditingScheduleId(schedule.id);
+                                  setEditingScheduleId(activeSchedule.id);
                                   setEditingHour(hour);
                                 }
                               }}
@@ -655,7 +711,7 @@ export default function SchedulesPage() {
                         )}
                       </div>
                     </div>
-                    {isEditing && !schedule && (
+                    {isEditing && !activeSchedule && (
                       <div className="mb-3 p-3 bg-muted/30 rounded-lg border border-border">
                         <label className="block text-sm font-medium mb-2">
                           Selecciona una ruta para este horario:
@@ -692,7 +748,7 @@ export default function SchedulesPage() {
                         )}
                       </div>
                     )}
-                    {(schedule || (isEditing && selectedRouteForHour[hour])) && (
+                    {(activeSchedule || (isEditing && selectedRouteForHour[hour])) && (
                       <div className="space-y-2">
                         {scheduleAssignments.map((assignment) => {
                           const bus = getBusById(assignment.busId);
@@ -738,11 +794,11 @@ export default function SchedulesPage() {
                           }`}>
                             {isEditing 
                               ? routeSelected
-                                ? schedule
+                                ? activeSchedule
                                   ? "Modo edición activo - Arrastra un bus aquí"
                                   : "Modo edición activo - Arrastra un bus aquí para crear el horario"
                                 : "Selecciona una ruta arriba para poder asignar buses"
-                              : schedule
+                              : activeSchedule
                                 ? "Haz clic en &apos;Editar&apos; para asignar buses"
                                 : "Haz clic en &apos;Crear Horario&apos; para activar"}
                           </div>

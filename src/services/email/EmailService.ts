@@ -43,7 +43,7 @@ export class EmailService {
     payment: PaymentData
   ): Promise<{ id: string } | undefined> {
     try {
-      const fromEmail = process.env.RESEND_FROM_EMAIL || "noreply@tdp.com";
+      const fromEmail = process.env.RESEND_FROM_EMAIL || "noreply@pimetransport.com";
       const toEmail = ticket.passengerEmail;
 
       if (!toEmail) {
@@ -94,7 +94,7 @@ export class EmailService {
     payment: PaymentData
   ): Promise<{ id: string } | undefined> {
     try {
-      const fromEmail = process.env.RESEND_FROM_EMAIL || "noreply@tdp.com";
+      const fromEmail = process.env.RESEND_FROM_EMAIL || "noreply@pimetransport.com";
       
       // Use the first ticket's email, or find a ticket with an email
       const ticketWithEmail = tickets.find((t) => t.ticket.passengerEmail);

@@ -24,7 +24,7 @@ if (!resendApiKey) {
 }
 
 if (!resendFromEmail) {
-  console.warn("⚠️  Warning: RESEND_FROM_EMAIL is not configured, using default: noreply@tdp.com");
+  console.warn("⚠️  Warning: RESEND_FROM_EMAIL is not configured, using default: noreply@pimetransport.com");
 }
 
 async function testEmail() {
@@ -39,7 +39,7 @@ async function testEmail() {
   console.log("   For production, you'll need to verify a domain in Resend.\n");
 
   console.log(`📬 Sending test email to: ${testEmail}`);
-  console.log(`📤 From email: ${resendFromEmail || "noreply@tdp.com"}\n`);
+  console.log(`📤 From email: ${resendFromEmail || "noreply@pimetransport.com"}\n`);
 
   try {
     // Create EmailService instance
@@ -95,7 +95,7 @@ async function testEmail() {
     // Send the email
     console.log("🚀 Sending email...");
     console.log(`📤 API Key (first 10 chars): ${resendApiKey?.substring(0, 10)}...`);
-    console.log(`📧 From: ${resendFromEmail || "noreply@tdp.com"}`);
+    console.log(`📧 From: ${resendFromEmail || "noreply@pimetransport.com"}`);
     console.log(`📬 To: ${testEmail}\n`);
     
     const result = await emailService.sendTicketConfirmation(

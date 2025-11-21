@@ -515,7 +515,7 @@ export function SettingsPanel() {
                   setEmailConfig({ ...emailConfig, from_email: e.target.value })
                 }
                 className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-                placeholder="noreply@tdp.com"
+                placeholder="noreply@pimetransport.com"
               />
               <p className="text-xs text-muted-foreground mt-1">
                 Email verificado en Resend. Para pruebas usa: onboarding@resend.dev

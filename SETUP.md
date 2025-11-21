@@ -94,7 +94,7 @@ BANESCO_WEBHOOK_URL=https://tu-dominio.com/api/public/payments/banesco/webhook
 # Get your API key from https://resend.com/api-keys
 RESEND_API_KEY=re_your_api_key_here
 # For testing/development, you can use: onboarding@resend.dev (no domain verification needed)
-# For production, use a verified domain email like: noreply@tdp.com
+# For production, use a verified domain email like: noreply@pimetransport.com
 RESEND_FROM_EMAIL=onboarding@resend.dev
 
 # App Configuration

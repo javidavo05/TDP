@@ -14,7 +14,7 @@ export class YappyButtonPaymentService {
     this.merchantId = process.env.YAPPY_MERCHANT_ID || "";
     this.secretKey = process.env.YAPPY_SECRET_KEY || "";
     this.baseUrl = process.env.YAPPY_BUTTON_API_URL || "https://apipagosbg.bgeneral.cloud";
-    this.domain = process.env.YAPPY_DOMAIN || process.env.NEXT_PUBLIC_APP_URL || "https://tdp-eosin.vercel.app";
+    this.domain = process.env.YAPPY_DOMAIN || process.env.NEXT_PUBLIC_APP_URL || "https://pimetransport.com";
 
     if (!this.merchantId || !this.secretKey) {
       console.warn("Yappy Button Payment credentials not configured.");

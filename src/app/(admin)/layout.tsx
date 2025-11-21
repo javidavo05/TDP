@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { AdminNavbar } from "@/components/admin/AdminNavbar";
 import { createClient } from "@/lib/supabase/client";
+import { PWAAuthService } from "@/lib/auth/pwaAuth";
 
 export default function AdminLayout({
   children,
@@ -16,6 +17,9 @@ export default function AdminLayout({
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    // Set PWA ID
+    PWAAuthService.setPWAId("admin");
+    
     // Register Admin manifest
     const link = document.createElement("link");
     link.rel = "manifest";
@@ -25,7 +29,7 @@ export default function AdminLayout({
     // Register Admin service worker
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker
-        .register("/sw-admin.js", { scope: "/dashboard" })
+        .register("/sw-admin.js", { scope: "/" })
         .then((registration) => {
           console.log("Admin Service Worker registered:", registration);
         })
@@ -48,8 +52,8 @@ export default function AdminLayout({
 
   useEffect(() => {
     const checkAuth = async () => {
-      const supabase = createClient();
       const isLoginPage = pathname?.includes("/login");
+      const savedCreds = PWAAuthService.getCredentials("admin");
 
       // Small delay to ensure cookies are set after login
       if (!isLoginPage) {
@@ -57,6 +61,8 @@ export default function AdminLayout({
       }
 
       try {
+        const supabase = createClient();
+        
         // Check Supabase session
         const {
           data: { user },
@@ -98,11 +104,23 @@ export default function AdminLayout({
         if (!role || !allowedRoles.includes(role)) {
           // Not authorized - sign out and redirect
           await supabase.auth.signOut();
+          PWAAuthService.clearCredentials("admin");
           if (!isLoginPage) {
             router.push("/login");
           }
           setIsLoading(false);
           return;
+        }
+
+        // Save credentials for future use
+        if (!savedCreds || savedCreds.userId !== user.id) {
+          PWAAuthService.saveCredentials({
+            userId: user.id,
+            email: user.email || "",
+            role: role,
+            pwaId: "admin",
+            expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
+          });
         }
 
         // User is authenticated and has allowed role

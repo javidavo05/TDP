@@ -49,6 +49,7 @@ interface TicketData {
   seatId: string;
   passengerName: string;
   passengerPhone?: string;
+  passengerEmail?: string;
   passengerDocumentId: string;
   passengerDocumentType: "cedula" | "pasaporte";
   destinationStopId: string | null;
@@ -119,7 +120,7 @@ export async function POST(request: NextRequest) {
           seatId: ticketData.seatId,
           passengerName: ticketData.passengerName,
           passengerPhone: ticketData.passengerPhone,
-          passengerEmail: undefined, // TODO: Add email support
+          passengerEmail: ticketData.passengerEmail || undefined,
           passengerDocumentId: ticketData.passengerDocumentId,
           passengerDocumentType: ticketData.passengerDocumentType,
           destinationStopId: ticketData.destinationStopId || "",

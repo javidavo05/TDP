@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { PWAAuthService } from "@/lib/auth/pwaAuth";
 
 export default function ScannerLayout({
   children,
@@ -12,6 +13,9 @@ export default function ScannerLayout({
   const router = useRouter();
 
   useEffect(() => {
+    // Set PWA ID
+    PWAAuthService.setPWAId("scanner");
+    
     // Register Scanner manifest
     const link = document.createElement("link");
     link.rel = "manifest";
@@ -21,7 +25,7 @@ export default function ScannerLayout({
     // Register Scanner service worker
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker
-        .register("/sw-scanner.js", { scope: "/scanner" })
+        .register("/sw-scanner.js", { scope: "/" })
         .then((registration) => {
           console.log("Scanner Service Worker registered:", registration);
         })
@@ -43,26 +47,49 @@ export default function ScannerLayout({
 
     // Check authentication and role (driver or assistant)
     const checkAuth = async () => {
-      const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const savedCreds = PWAAuthService.getCredentials("scanner");
+      
+      // If no saved credentials, check Supabase auth
+      if (!savedCreds) {
+        const supabase = createClient();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
 
-      if (!user) {
-        router.push("/login");
-        return;
-      }
+        if (!user) {
+          router.push("/login");
+          return;
+        }
 
-      const { data: userData } = await supabase
-        .from("users")
-        .select("role")
-        .eq("id", user.id)
-        .single();
+        const { data: userData } = await supabase
+          .from("users")
+          .select("role")
+          .eq("id", user.id)
+          .single();
 
-      const allowedRoles = ["driver", "assistant", "admin"];
-      if (!userData?.role || !allowedRoles.includes(userData.role)) {
-        router.push("/dashboard");
-        return;
+        const role = userData?.role || user.user_metadata?.role;
+        const allowedRoles = ["driver", "assistant", "admin"];
+        
+        if (!role || !allowedRoles.includes(role)) {
+          router.push("/login");
+          return;
+        }
+        
+        // Save credentials for future use
+        PWAAuthService.saveCredentials({
+          userId: user.id,
+          email: user.email || "",
+          role: role,
+          pwaId: "scanner",
+          expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
+        });
+      } else {
+        // Check if credentials are valid
+        if (!PWAAuthService.hasAccess("scanner", savedCreds.role)) {
+          PWAAuthService.clearCredentials("scanner");
+          router.push("/login");
+          return;
+        }
       }
     };
 

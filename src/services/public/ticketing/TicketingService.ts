@@ -79,6 +79,18 @@ export class TicketingService {
           email: data.passengerEmail,
         });
         passengerId = passenger.id;
+        
+        // Increment loyalty points when ticket is created (10 points per trip)
+        try {
+          const supabase = await createClient();
+          await supabase.rpc("increment_passenger_trips", {
+            passenger_document_id: data.passengerDocumentId,
+            points_to_add: 10,
+          });
+        } catch (loyaltyError) {
+          console.warn("Failed to increment loyalty points:", loyaltyError);
+          // Continue without failing the ticket creation
+        }
       } catch (error) {
         console.warn("Failed to create/find passenger:", error);
         // Continue without passenger if creation fails

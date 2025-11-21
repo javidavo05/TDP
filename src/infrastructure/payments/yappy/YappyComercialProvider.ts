@@ -87,7 +87,7 @@ export class YappyComercialProvider implements IPaymentProvider {
       const orderId = `TDP${Date.now().toString().slice(-12)}`.substring(0, 15);
 
       // Crear la orden usando el Botón de Pago Yappy
-      const ipnUrl = `${process.env.YAPPY_WEBHOOK_URL || process.env.NEXT_PUBLIC_APP_URL || "https://tdp-eosin.vercel.app"}/api/yappy/button/ipn`;
+      const ipnUrl = `${process.env.YAPPY_WEBHOOK_URL || process.env.NEXT_PUBLIC_APP_URL || "https://pimetransport.com"}/api/yappy/button/ipn`;
       
       const result = await buttonService.createOrder({
         orderId,

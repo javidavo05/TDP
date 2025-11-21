@@ -91,6 +91,7 @@ interface Passenger {
   seatId: string;
   name: string;
   phone?: string;
+  email?: string;
   documentId: string;
   documentType: "cedula" | "pasaporte";
 }
@@ -427,6 +428,7 @@ export default function POSPage() {
         seatId: passenger.seatId,
         passengerName: passenger.name,
         passengerPhone: passenger.phone || undefined,
+        passengerEmail: passenger.email || undefined,
         passengerDocumentId: passenger.documentId,
         passengerDocumentType: passenger.documentType,
         destinationStopId: null, // TODO: Get from route stops
@@ -818,6 +820,22 @@ export default function POSPage() {
                               onChange={(e) => updatePassenger(passenger.id, { phone: e.target.value })}
                               className="w-full px-4 py-3 bg-background border-2 border-input rounded-lg text-lg font-semibold focus:outline-none focus:ring-2 focus:ring-primary min-h-[56px]"
                             />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-semibold mb-2">
+                              Correo Electrónico (Opcional)
+                            </label>
+                            <input
+                              type="email"
+                              value={passenger.email || ""}
+                              onChange={(e) => updatePassenger(passenger.id, { email: e.target.value })}
+                              className="w-full px-4 py-3 bg-background border-2 border-input rounded-lg text-lg font-semibold focus:outline-none focus:ring-2 focus:ring-primary min-h-[56px]"
+                              placeholder="ejemplo@correo.com"
+                            />
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Recomendado para recibir boletos digitales por correo
+                            </p>
                           </div>
 
                           <div>

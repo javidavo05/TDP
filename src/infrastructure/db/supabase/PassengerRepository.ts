@@ -136,7 +136,11 @@ export class PassengerRepository implements IPassengerRepository {
       data.date_of_birth ? new Date(data.date_of_birth) : null,
       data.address,
       new Date(data.created_at),
-      new Date(data.updated_at)
+      new Date(data.updated_at),
+      data.user_id || null,
+      data.total_trips || 0,
+      data.loyalty_points || 0,
+      data.loyalty_tier || "bronze"
     );
   }
 }

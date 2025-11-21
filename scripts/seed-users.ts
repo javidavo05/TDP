@@ -28,7 +28,7 @@ async function seedUsers() {
   console.log("🌱 Starting user seed...");
 
   // Create client user
-  const clientEmail = "cliente@tdp.com";
+  const clientEmail = "cliente@pimetransport.com";
   const clientPassword = "Cliente123!";
 
   try {
@@ -102,7 +102,7 @@ async function seedUsers() {
   }
 
   // Create super admin user
-  const adminEmail = "admin@tdp.com";
+  const adminEmail = "admin@pimetransport.com";
   const adminPassword = "Admin123!";
 
   try {

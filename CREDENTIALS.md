@@ -4,7 +4,7 @@ Este documento contiene las credenciales de los usuarios de prueba creados para 
 
 ## Usuario Cliente
 
-**Email:** `cliente@tdp.com`  
+**Email:** `cliente@pimetransport.com`  
 **Password:** `Cliente123!`  
 **Rol:** `passenger`
 
@@ -15,7 +15,7 @@ Este usuario puede:
 
 ## Super Administrador
 
-**Email:** `admin@tdp.com`  
+**Email:** `admin@pimetransport.com`  
 **Password:** `Admin123!`  
 **Rol:** `admin`
 

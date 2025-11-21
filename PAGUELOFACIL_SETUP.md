@@ -16,7 +16,7 @@ Agrega las siguientes variables a tu archivo `.env.local` o `.env`:
 PAGUELOFACIL_CCLW=tu_cclw_aqui
 PAGUELOFACIL_ACCESS_TOKEN=tu_access_token_aqui
 PAGUELOFACIL_API_URL=https://api.paguelofacil.com
-PAGUELOFACIL_WEBHOOK_URL=https://tdp-eosin.vercel.app/api/public/payments/paguelofacil/webhook
+PAGUELOFACIL_WEBHOOK_URL=https://pimetransport.com/api/public/payments/paguelofacil/webhook
 ```
 
 ### Valores a Configurar
@@ -50,10 +50,10 @@ El webhook URL depende de dónde esté desplegada tu aplicación:
 
 #### Si estás en Vercel:
 ```env
-PAGUELOFACIL_WEBHOOK_URL=https://tdp-eosin.vercel.app/api/public/payments/paguelofacil/webhook
+PAGUELOFACIL_WEBHOOK_URL=https://pimetransport.com/api/public/payments/paguelofacil/webhook
 ```
 
-**✅ Configurado para este proyecto**: `https://tdp-eosin.vercel.app/api/public/payments/paguelofacil/webhook`
+**✅ Configurado para este proyecto**: `https://pimetransport.com/api/public/payments/paguelofacil/webhook`
 
 #### Si estás en un dominio personalizado:
 ```env
@@ -73,7 +73,7 @@ PAGUELOFACIL_WEBHOOK_URL=https://abc123.ngrok.io/api/public/payments/paguelofaci
 1. Accede al portal de PagueloFacil Business
 2. Ve a **"Configuración"** o **"Webhooks"**
 3. Ingresa la URL completa del webhook:
-   - **URL para este proyecto**: `https://tdp-eosin.vercel.app/api/public/payments/paguelofacil/webhook`
+   - **URL para este proyecto**: `https://pimetransport.com/api/public/payments/paguelofacil/webhook`
 4. Guarda la configuración
 
 ## Flujo de Pago

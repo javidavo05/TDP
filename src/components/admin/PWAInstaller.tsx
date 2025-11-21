@@ -14,6 +14,40 @@ interface PWAConfig {
   color: string;
 }
 
+// Get base URL for subdomains
+const getPWAUrl = (pwaId: string, path: string = "") => {
+  if (typeof window === "undefined") return path;
+  
+  const hostname = window.location.hostname;
+  const isLocalhost = hostname.includes("localhost") || hostname.includes("127.0.0.1");
+  
+  if (isLocalhost) {
+    // Development: use localhost with subdomain
+    const subdomainMap: Record<string, string> = {
+      admin: "admin.localhost",
+      driver: "driver.localhost",
+      assistant: "assistant.localhost",
+      scanner: "scanner.localhost",
+      pos: "pos.localhost",
+      public: "localhost",
+    };
+    const subdomain = subdomainMap[pwaId] || "localhost";
+    return `http://${subdomain}:3000${path}`;
+  }
+  
+  // Production: use subdomains
+  const subdomainMap: Record<string, string> = {
+    admin: "admin.pimetransport.com",
+    driver: "driver.pimetransport.com",
+    assistant: "assistant.pimetransport.com",
+    scanner: "scanner.pimetransport.com",
+    pos: "pos.pimetransport.com",
+    public: "pimetransport.com",
+  };
+  const subdomain = subdomainMap[pwaId] || "pimetransport.com";
+  return `https://${subdomain}${path}`;
+};
+
 const PWA_CONFIGS: PWAConfig[] = [
   {
     id: "admin",
@@ -21,7 +55,7 @@ const PWA_CONFIGS: PWAConfig[] = [
     shortName: "Admin",
     description: "Panel de administración completo del sistema",
     manifestPath: "/manifest-admin.json",
-    url: "/dashboard",
+    url: getPWAUrl("admin"),
     icon: <Monitor className="w-6 h-6" />,
     color: "bg-purple-500",
   },
@@ -31,7 +65,7 @@ const PWA_CONFIGS: PWAConfig[] = [
     shortName: "Público",
     description: "Aplicación pública para compra de boletos",
     manifestPath: "/manifest.json",
-    url: "/",
+    url: getPWAUrl("public"),
     icon: <Smartphone className="w-6 h-6" />,
     color: "bg-blue-500",
   },
@@ -41,7 +75,7 @@ const PWA_CONFIGS: PWAConfig[] = [
     shortName: "Scanner",
     description: "Escáner de códigos QR para validación de boletos",
     manifestPath: "/manifest-scanner.json",
-    url: "/scanner",
+    url: getPWAUrl("scanner"),
     icon: <QrCode className="w-6 h-6" />,
     color: "bg-green-500",
   },
@@ -51,7 +85,7 @@ const PWA_CONFIGS: PWAConfig[] = [
     shortName: "Chofer",
     description: "Aplicación móvil para choferes",
     manifestPath: "/manifest-driver.json",
-    url: "/mobile/driver",
+    url: getPWAUrl("driver", "/login"),
     icon: <User className="w-6 h-6" />,
     color: "bg-blue-600",
   },
@@ -61,7 +95,7 @@ const PWA_CONFIGS: PWAConfig[] = [
     shortName: "Ayudante",
     description: "Aplicación móvil para ayudantes de bus",
     manifestPath: "/manifest-assistant.json",
-    url: "/mobile/assistant",
+    url: getPWAUrl("assistant", "/login"),
     icon: <Users className="w-6 h-6" />,
     color: "bg-emerald-500",
   },

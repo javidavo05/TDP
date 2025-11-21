@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { UniversalThemeToggle } from "@/components/ui/UniversalThemeToggle";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { PWAAuthService } from "@/lib/auth/pwaAuth";
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -42,6 +43,42 @@ export default function AdminLoginPage() {
         .single();
 
       const role = userData?.role || authData.user.user_metadata?.role;
+
+      // Determine PWA ID based on subdomain or current path
+      const hostname = window.location.hostname;
+      const parts = hostname.split(".");
+      const subdomain = parts.length > 2 ? parts[0] : null;
+      
+      let pwaId = "admin";
+      if (subdomain) {
+        // Use subdomain to determine PWA
+        const subdomainMap: Record<string, string> = {
+          admin: "admin",
+          driver: "driver",
+          assistant: "assistant",
+          scanner: "scanner",
+          pos: "pos",
+        };
+        pwaId = subdomainMap[subdomain] || "admin";
+      } else {
+        // Fallback to path detection
+        const currentPath = window.location.pathname;
+        if (currentPath.includes("/mobile/driver")) pwaId = "driver";
+        else if (currentPath.includes("/mobile/assistant")) pwaId = "assistant";
+        else if (currentPath.includes("/scanner")) pwaId = "scanner";
+        else if (currentPath.includes("/pos")) pwaId = "pos";
+        else if (currentPath === "/" || currentPath.startsWith("/trips")) pwaId = "public";
+      }
+
+      // Save credentials locally for this PWA
+      PWAAuthService.setPWAId(pwaId);
+      PWAAuthService.saveCredentials({
+        userId: authData.user.id,
+        email: authData.user.email || credentials.email,
+        role: role || "public",
+        pwaId: pwaId,
+        expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000, // 7 days
+      });
 
       // Redirect based on role
       if (role === "pos_agent") {
@@ -129,7 +166,7 @@ export default function AdminLoginPage() {
                 onChange={(e) =>
                   setCredentials({ ...credentials, email: e.target.value })
                 }
-                placeholder="admin@tdp.com"
+                placeholder="admin@pimetransport.com"
                 className="w-full px-4 py-3 bg-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
                 required
               />
