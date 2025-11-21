@@ -135,23 +135,20 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Actualizar metadata del pago
-    await paymentRepository.update(createdPayment.id, {
-      metadata: {
-        ...createdPayment.metadata,
-        paguelofacilTransactionId: paymentResult.transactionId,
-        paguelofacilMetadata: paymentResult.metadata,
-      },
-    });
-
     return NextResponse.json({
       payment: {
-        ...createdPayment,
-        metadata: {
-          ...createdPayment.metadata,
-          paguelofacilTransactionId: paymentResult.transactionId,
-          paguelofacilMetadata: paymentResult.metadata,
-        },
+        id: createdPayment.id,
+        ticketId: createdPayment.ticketId,
+        paymentMethod: createdPayment.paymentMethod,
+        amount: createdPayment.amount,
+        itbms: createdPayment.itbms,
+        totalAmount: createdPayment.totalAmount,
+        status: createdPayment.status,
+        providerTransactionId: createdPayment.providerTransactionId,
+        providerResponse: createdPayment.providerResponse,
+        processedAt: createdPayment.processedAt,
+        createdAt: createdPayment.createdAt,
+        updatedAt: createdPayment.updatedAt,
       },
       transactionId: paymentResult.transactionId,
       status: paymentResult.status,

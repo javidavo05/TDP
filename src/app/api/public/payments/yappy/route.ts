@@ -70,26 +70,47 @@ export async function POST(request: NextRequest) {
     payment.markAsProcessing();
     const createdPayment = await paymentRepository.create(payment);
 
-    // Actualizar metadata del pago con orderId de Yappy
+    // Actualizar providerResponse con información adicional de Yappy
     const orderId = paymentResult.metadata?.orderId as string || paymentResult.transactionId;
-    await paymentRepository.update(createdPayment.id, {
-      metadata: {
-        ...createdPayment.metadata,
+    const updatedPayment = new Payment(
+      createdPayment.id,
+      createdPayment.ticketId,
+      createdPayment.paymentMethod,
+      createdPayment.amount,
+      createdPayment.itbms,
+      createdPayment.totalAmount,
+      createdPayment.status,
+      createdPayment.providerTransactionId,
+      {
+        ...(createdPayment.providerResponse as Record<string, unknown> || {}),
         yappyOrderId: orderId,
         yappyTransactionId: paymentResult.transactionId,
         yappyMetadata: paymentResult.metadata,
       },
-    });
+      createdPayment.processedAt,
+      createdPayment.posSessionId,
+      createdPayment.receivedAmount,
+      createdPayment.changeAmount,
+      createdPayment.createdAt,
+      new Date() // updatedAt
+    );
+    
+    await paymentRepository.update(updatedPayment);
 
     return NextResponse.json({
       payment: {
-        ...createdPayment,
-        metadata: {
-          ...createdPayment.metadata,
-          yappyOrderId: orderId,
-          yappyTransactionId: paymentResult.transactionId,
-          yappyMetadata: paymentResult.metadata,
-        },
+        id: updatedPayment.id,
+        ticketId: updatedPayment.ticketId,
+        paymentMethod: updatedPayment.paymentMethod,
+        amount: updatedPayment.amount,
+        itbms: updatedPayment.itbms,
+        totalAmount: updatedPayment.totalAmount,
+        status: updatedPayment.status,
+        providerTransactionId: updatedPayment.providerTransactionId,
+        providerResponse: updatedPayment.providerResponse,
+        processedAt: updatedPayment.processedAt,
+        createdAt: updatedPayment.createdAt,
+        updatedAt: updatedPayment.updatedAt,
       },
       yappyPayment: paymentResult,
       orderId: orderId, // Para el componente del botón

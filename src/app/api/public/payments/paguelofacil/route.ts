@@ -71,25 +71,46 @@ export async function POST(request: NextRequest) {
     payment.markAsProcessing();
     const createdPayment = await paymentRepository.create(payment);
 
-    // Actualizar metadata del pago con transactionId de PagueloFacil
-    await paymentRepository.update(createdPayment.id, {
-      metadata: {
-        ...createdPayment.metadata,
+    // Actualizar providerResponse con información adicional de PagueloFacil
+    const updatedPayment = new Payment(
+      createdPayment.id,
+      createdPayment.ticketId,
+      createdPayment.paymentMethod,
+      createdPayment.amount,
+      createdPayment.itbms,
+      createdPayment.totalAmount,
+      createdPayment.status,
+      createdPayment.providerTransactionId,
+      {
+        ...(createdPayment.providerResponse as Record<string, unknown> || {}),
         paguelofacilTransactionId: paymentResult.transactionId,
         paguelofacilMetadata: paymentResult.metadata,
         paymentUrl: paymentResult.metadata?.paymentUrl, // URL para redirigir al usuario
       },
-    });
+      createdPayment.processedAt,
+      createdPayment.posSessionId,
+      createdPayment.receivedAmount,
+      createdPayment.changeAmount,
+      createdPayment.createdAt,
+      new Date() // updatedAt
+    );
+    
+    await paymentRepository.update(updatedPayment);
 
     return NextResponse.json({
       payment: {
-        ...createdPayment,
-        metadata: {
-          ...createdPayment.metadata,
-          paguelofacilTransactionId: paymentResult.transactionId,
-          paguelofacilMetadata: paymentResult.metadata,
-          paymentUrl: paymentResult.metadata?.paymentUrl,
-        },
+        id: updatedPayment.id,
+        ticketId: updatedPayment.ticketId,
+        paymentMethod: updatedPayment.paymentMethod,
+        amount: updatedPayment.amount,
+        itbms: updatedPayment.itbms,
+        totalAmount: updatedPayment.totalAmount,
+        status: updatedPayment.status,
+        providerTransactionId: updatedPayment.providerTransactionId,
+        providerResponse: updatedPayment.providerResponse,
+        processedAt: updatedPayment.processedAt,
+        createdAt: updatedPayment.createdAt,
+        updatedAt: updatedPayment.updatedAt,
       },
       paguelofacilPayment: paymentResult,
       paymentUrl: paymentResult.metadata?.paymentUrl, // URL para redirigir al usuario a PagueloFacil

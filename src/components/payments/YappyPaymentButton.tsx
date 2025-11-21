@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { Loader2 } from "lucide-react";
 
 interface YappyPaymentButtonProps {
@@ -170,14 +170,14 @@ export function YappyPaymentButton({
 
   return (
     <div className={className}>
-      <btn-yappy
-        theme={theme}
-        rounded={rounded ? "true" : "false"}
-        merchant-id={process.env.NEXT_PUBLIC_YAPPY_MERCHANT_ID || "MVZQO-44905104"}
-        order-id={currentOrderId}
-        amount={amount.toString()}
-        description={description}
-      ></btn-yappy>
+      {React.createElement("btn-yappy", {
+        theme: theme,
+        rounded: rounded ? "true" : "false",
+        "merchant-id": process.env.NEXT_PUBLIC_YAPPY_MERCHANT_ID || "MVZQO-44905104",
+        "order-id": currentOrderId,
+        amount: amount.toString(),
+        description: description,
+      })}
     </div>
   );
 }
