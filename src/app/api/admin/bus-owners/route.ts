@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
               company_name: companyName,
               email: user.email || null,
             })
-            .select("id, company_name, user_id")
+            .select("id, company_name, user_id, phone, email")
             .single();
 
           if (createError) {
@@ -85,7 +85,11 @@ export async function GET(request: NextRequest) {
               email: user.email || null,
             };
           } else {
-            owner = newOwner;
+            owner = {
+              ...newOwner,
+              phone: newOwner.phone || null,
+              email: newOwner.email || null,
+            };
           }
         }
 
