@@ -4,6 +4,8 @@ import { useEffect, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { PAYMENT_METHODS } from "@/lib/constants";
 import { formatCurrency, calculateITBMS, ITBMS_RATE } from "@/lib/utils";
+import { YappyPaymentButton } from "@/components/payments/YappyPaymentButton";
+import { PagueloFacilPaymentButton } from "@/components/payments/PagueloFacilPaymentButton";
 
 function CheckoutContent() {
   const searchParams = useSearchParams();
@@ -19,6 +21,7 @@ function CheckoutContent() {
     passengerDocumentType: "cedula" as "cedula" | "pasaporte",
     paymentMethod: "yappy" as string,
   });
+  const [ticketId, setTicketId] = useState<string | null>(null);
 
   const tripId = searchParams.get("tripId");
   const seatId = searchParams.get("seatId");
@@ -45,6 +48,44 @@ function CheckoutContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Si es Yappy o PagueloFacil, el componente manejará el pago
+    if (formData.paymentMethod === "yappy" || formData.paymentMethod === "paguelofacil") {
+      // Solo crear el ticket si no existe
+      if (!ticketId) {
+        setProcessing(true);
+        try {
+          const ticketResponse = await fetch("/api/public/tickets", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              tripId,
+              seatId,
+              passengerName: formData.passengerName,
+              passengerEmail: formData.passengerEmail,
+              passengerPhone: formData.passengerPhone,
+              passengerDocumentId: formData.passengerDocumentId,
+              passengerDocumentType: formData.passengerDocumentType,
+              price: trip.price,
+              destinationStopId: trip.routeId,
+            }),
+          });
+
+          const ticketData = await ticketResponse.json();
+          if (!ticketResponse.ok) {
+            throw new Error(ticketData.error);
+          }
+
+          setTicketId(ticketData.ticket.id);
+        } catch (error) {
+          alert((error as Error).message || "Error al crear el ticket");
+        } finally {
+          setProcessing(false);
+        }
+      }
+      return;
+    }
+
     setProcessing(true);
 
     try {
@@ -70,7 +111,16 @@ function CheckoutContent() {
         throw new Error(ticketData.error);
       }
 
-      // Process payment
+      setTicketId(ticketData.ticket.id);
+
+      // Si el método de pago es Yappy, no procesamos el pago aquí
+      // El botón Yappy lo manejará
+      if (formData.paymentMethod === "yappy") {
+        // El pago se procesará cuando el usuario haga clic en el botón Yappy
+        return;
+      }
+
+      // Process payment for other methods
       const paymentResponse = await fetch("/api/public/payments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -227,13 +277,61 @@ function CheckoutContent() {
                   <span>{formatCurrency(total)}</span>
                 </div>
               </div>
-              <button
-                type="submit"
-                disabled={processing || !formData.passengerName || !formData.passengerDocumentId}
-                className="w-full px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 font-semibold disabled:opacity-50"
-              >
-                {processing ? "Procesando..." : "Completar Compra"}
-              </button>
+              {formData.paymentMethod === "yappy" ? (
+                <YappyPaymentButton
+                  amount={total}
+                  description={`Boleto TDP - ${formData.passengerName}`}
+                  customerInfo={{
+                    name: formData.passengerName,
+                    email: formData.passengerEmail,
+                    phone: formData.passengerPhone,
+                  }}
+                  ticketId={ticketId || undefined}
+                  theme="orange"
+                  rounded={true}
+                  onSuccess={(orderId) => {
+                    // El IPN de Yappy actualizará el ticket cuando se complete el pago
+                    // Redirigir a la página del ticket
+                    if (ticketId) {
+                      router.push(`/tickets/${ticketId}?payment=pending&yappy=${orderId}`);
+                    }
+                  }}
+                  onError={(error) => {
+                    alert(`Error: ${error}`);
+                  }}
+                  disabled={processing || !formData.passengerName || !formData.passengerDocumentId}
+                />
+              ) : formData.paymentMethod === "paguelofacil" ? (
+                <PagueloFacilPaymentButton
+                  amount={total}
+                  description={`Boleto TDP - ${formData.passengerName}`}
+                  customerInfo={{
+                    name: formData.passengerName,
+                    email: formData.passengerEmail,
+                    phone: formData.passengerPhone,
+                  }}
+                  ticketId={ticketId || undefined}
+                  onSuccess={(transactionId) => {
+                    // El webhook de PagueloFacil actualizará el ticket cuando se complete el pago
+                    // Redirigir a la página del ticket
+                    if (ticketId) {
+                      router.push(`/tickets/${ticketId}?payment=pending&paguelofacil=${transactionId}`);
+                    }
+                  }}
+                  onError={(error) => {
+                    alert(`Error: ${error}`);
+                  }}
+                  disabled={processing || !formData.passengerName || !formData.passengerDocumentId}
+                />
+              ) : (
+                <button
+                  type="submit"
+                  disabled={processing || !formData.passengerName || !formData.passengerDocumentId}
+                  className="w-full px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 font-semibold disabled:opacity-50"
+                >
+                  {processing ? "Procesando..." : "Completar Compra"}
+                </button>
+              )}
             </div>
           </div>
         </form>

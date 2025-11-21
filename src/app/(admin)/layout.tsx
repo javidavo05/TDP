@@ -16,6 +16,37 @@ export default function AdminLayout({
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    // Register Admin manifest
+    const link = document.createElement("link");
+    link.rel = "manifest";
+    link.href = "/manifest-admin.json";
+    document.head.appendChild(link);
+
+    // Register Admin service worker
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker
+        .register("/sw-admin.js", { scope: "/dashboard" })
+        .then((registration) => {
+          console.log("Admin Service Worker registered:", registration);
+        })
+        .catch((error) => {
+          console.error("Admin Service Worker registration failed:", error);
+        });
+    }
+
+    // Set favicon for admin
+    const favicon = document.querySelector("link[rel='icon']") as HTMLLinkElement;
+    if (favicon) {
+      favicon.href = "/favicon-admin.png";
+    } else {
+      const newFavicon = document.createElement("link");
+      newFavicon.rel = "icon";
+      newFavicon.href = "/favicon-admin.png";
+      document.head.appendChild(newFavicon);
+    }
+  }, []);
+
+  useEffect(() => {
     const checkAuth = async () => {
       const supabase = createClient();
       const isLoginPage = pathname?.includes("/login");

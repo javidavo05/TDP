@@ -1,13 +1,4 @@
-// BusAssignmentChange is defined inline in the repository
-interface BusAssignmentChange {
-  id: string;
-  assignmentId: string;
-  oldBusId: string | null;
-  newBusId: string;
-  reason: string;
-  changedBy: string;
-  changedAt: Date;
-}
+import { BusAssignmentChange } from "@/domain/entities";
 
 export interface IBusAssignmentChangeRepository {
   findById(id: string): Promise<BusAssignmentChange | null>;

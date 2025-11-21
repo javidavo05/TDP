@@ -31,6 +31,17 @@ export default function POSLayout({
         });
     }
 
+    // Set favicon for POS
+    const favicon = document.querySelector("link[rel='icon']") as HTMLLinkElement;
+    if (favicon) {
+      favicon.href = "/favicon-pos.png";
+    } else {
+      const newFavicon = document.createElement("link");
+      newFavicon.rel = "icon";
+      newFavicon.href = "/favicon-pos.png";
+      document.head.appendChild(newFavicon);
+    }
+
     // Check authentication and role
     const checkAuth = async () => {
       const supabase = createClient();

@@ -1,21 +1,73 @@
 import { IPaymentProvider } from "@/domain/interfaces";
 import { PaymentMethod, PaymentStatus, PaymentProviderResponse } from "@/domain/types";
+import { getYappyAPIClient } from "@/services/yappy/YappyAPIClient";
 
+export interface CollectionMethod {
+  alias: string;
+  type: "DIRECTORIO" | "BOTON_DE_PAGO" | "PUNTO_YAPPY" | "INTEGRACION_YAPPY" | "PUNTO_DE_VENTA";
+  details?: Array<{ id: string; value: string }>;
+}
+
+export interface TransactionDetail {
+  id: string;
+  number: string;
+  registration_date: string;
+  payment_date: string;
+  cut_off_date: string;
+  type: string;
+  category: "INTERBANK" | "INTRABANK";
+  referenceName?: string;
+  referenceId?: string;
+  charge: {
+    amount: number;
+    partial_amount: number;
+    tip: number;
+    tax: number;
+    currency: string;
+  };
+  fee?: {
+    amount: number;
+    currency: string;
+  };
+  description: string;
+  bill_description?: string;
+  status: "PENDING" | "EXECUTED" | "COMPLETED" | "REJECTED" | "FAILED";
+  metadata?: Array<{ id: string; value: string }>;
+  debitor?: {
+    alias: string;
+    complete_name: string;
+    alias_type: string;
+    bank_name: string;
+  };
+  creditor?: {
+    alias: string;
+    complete_name: string;
+    alias_type: string;
+    bank_name: string;
+  };
+}
+
+/**
+ * Proveedor de pago Yappy Comercial
+ * Implementa la integración según el swagger v1.1.0
+ */
 export class YappyComercialProvider implements IPaymentProvider {
   method: PaymentMethod = "yappy";
 
-  private apiKey: string;
   private merchantId: string;
-  private secretKey: string;
-  private callbackUrl: string;
+  private webhookUrl: string;
+  private apiClient;
 
   constructor() {
-    this.apiKey = process.env.YAPPY_API_KEY || "";
     this.merchantId = process.env.YAPPY_MERCHANT_ID || "";
-    this.secretKey = process.env.YAPPY_SECRET_KEY || "";
-    this.callbackUrl = process.env.YAPPY_CALLBACK_URL || "";
+    this.webhookUrl = process.env.YAPPY_WEBHOOK_URL || "";
+    this.apiClient = getYappyAPIClient();
   }
 
+  /**
+   * Inicia un pago usando el Botón de Pago Yappy
+   * Implementación basada en: https://www.yappy.com.pa/comercial/desarrolladores/boton-de-pago-yappy-nueva-integracion/
+   */
   async initiatePayment(data: {
     amount: number;
     itbms: number;
@@ -27,39 +79,36 @@ export class YappyComercialProvider implements IPaymentProvider {
     };
     metadata?: Record<string, unknown>;
   }): Promise<PaymentProviderResponse> {
-    // TODO: Implement Yappy Comercial API integration
-    // This is a placeholder implementation
-    // Refer to Yappy Comercial API documentation for actual implementation
-
     try {
-      // Example API call structure (needs to be implemented based on Yappy docs)
-      const response = await fetch("https://api.yappy.com.pa/v1/payments", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${this.apiKey}`,
-        },
-        body: JSON.stringify({
-          merchantId: this.merchantId,
-          amount: data.amount + data.itbms,
-          description: data.description,
-          customer: data.customerInfo,
-          callbackUrl: this.callbackUrl,
-          metadata: data.metadata,
-        }),
+      const { getYappyButtonPaymentService } = await import("@/services/yappy/YappyButtonPaymentService");
+      const buttonService = getYappyButtonPaymentService();
+
+      // Generar orderId único (máximo 15 caracteres alfanuméricos)
+      const orderId = `TDP${Date.now().toString().slice(-12)}`.substring(0, 15);
+
+      // Crear la orden usando el Botón de Pago Yappy
+      const ipnUrl = `${process.env.YAPPY_WEBHOOK_URL || process.env.NEXT_PUBLIC_APP_URL || "https://tdp-eosin.vercel.app"}/api/yappy/button/ipn`;
+      
+      const result = await buttonService.createOrder({
+        orderId,
+        amount: data.amount + data.itbms,
+        description: data.description,
+        ipnUrl,
       });
 
-      if (!response.ok) {
-        throw new Error(`Yappy API error: ${response.statusText}`);
-      }
-
-      const result = await response.json();
-
       return {
-        transactionId: result.transactionId || result.id,
-        status: result.status === "approved" ? "completed" : "pending",
+        transactionId: orderId,
+        status: "pending",
         amount: data.amount + data.itbms,
-        metadata: result,
+        metadata: {
+          orderId,
+          amount: data.amount + data.itbms,
+          description: data.description,
+          customerInfo: data.customerInfo,
+          ipnUrl,
+          merchantId: this.merchantId,
+          ...data.metadata,
+        },
       };
     } catch (error) {
       return {
@@ -71,31 +120,68 @@ export class YappyComercialProvider implements IPaymentProvider {
     }
   }
 
+  /**
+   * Verifica el estado de un pago consultando el detalle de la transacción
+   * GET /v1/movement/{transaction-id}
+   */
   async verifyPayment(transactionId: string): Promise<PaymentProviderResponse> {
-    // TODO: Implement payment verification
     try {
-      const response = await fetch(`https://api.yappy.com.pa/v1/payments/${transactionId}`, {
-        method: "GET",
-        headers: {
-          "Authorization": `Bearer ${this.apiKey}`,
-        },
-      });
+      const transaction = await this.apiClient.get<TransactionDetail>(
+        `/v1/movement/${transactionId}`
+      );
 
-      if (!response.ok) {
-        throw new Error(`Yappy API error: ${response.statusText}`);
-      }
-
-      const result = await response.json();
+      // Mapear estados de Yappy a estados de PaymentStatus
+      const statusMap: Record<string, PaymentStatus> = {
+        PENDING: "pending",
+        EXECUTED: "processing",
+        COMPLETED: "completed",
+        REJECTED: "failed",
+        FAILED: "failed",
+      };
 
       return {
-        transactionId: result.transactionId || result.id,
-        status: result.status === "approved" ? "completed" : "pending",
-        amount: result.amount,
-        metadata: result,
+        transactionId: transaction.id,
+        status: statusMap[transaction.status] || "pending",
+        amount: transaction.charge.amount,
+        metadata: {
+          transaction,
+        },
       };
     } catch (error) {
+      // Si no se encuentra la transacción, puede estar pendiente
       return {
         transactionId,
+        status: "pending",
+        amount: 0,
+        error: (error as Error).message,
+      };
+    }
+  }
+
+  /**
+   * Procesa un callback/webhook de Yappy
+   * El webhook contiene información sobre el estado de la transacción
+   */
+  async processCallback(data: unknown): Promise<PaymentProviderResponse> {
+    try {
+      const callbackData = data as any;
+
+      // El webhook puede venir en diferentes formatos
+      // Intentar extraer el ID de transacción
+      const transactionId =
+        callbackData.id ||
+        callbackData.transactionId ||
+        callbackData.transaction_id;
+
+      if (!transactionId) {
+        throw new Error("Transaction ID not found in callback data");
+      }
+
+      // Verificar el estado consultando la API
+      return await this.verifyPayment(transactionId);
+    } catch (error) {
+      return {
+        transactionId: "",
         status: "failed",
         amount: 0,
         error: (error as Error).message,
@@ -103,43 +189,21 @@ export class YappyComercialProvider implements IPaymentProvider {
     }
   }
 
-  async processCallback(data: unknown): Promise<PaymentProviderResponse> {
-    // TODO: Implement callback processing based on Yappy webhook format
-    const callbackData = data as any;
-
-    return {
-      transactionId: callbackData.transactionId || callbackData.id,
-      status: callbackData.status === "approved" ? "completed" : "failed",
-      amount: callbackData.amount,
-      metadata: callbackData,
-    };
-  }
-
+  /**
+   * Anula una transacción
+   * PUT /v1/transaction/{transaction-id}
+   */
   async refund(transactionId: string, amount: number): Promise<PaymentProviderResponse> {
-    // TODO: Implement refund
     try {
-      const response = await fetch(`https://api.yappy.com.pa/v1/payments/${transactionId}/refund`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${this.apiKey}`,
-        },
-        body: JSON.stringify({
-          amount,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Yappy API error: ${response.statusText}`);
-      }
-
-      const result = await response.json();
+      await this.apiClient.put(`/v1/transaction/${transactionId}`);
 
       return {
-        transactionId: result.transactionId || result.id,
+        transactionId,
         status: "refunded",
         amount,
-        metadata: result,
+        metadata: {
+          refundedAt: new Date().toISOString(),
+        },
       };
     } catch (error) {
       return {
@@ -149,6 +213,17 @@ export class YappyComercialProvider implements IPaymentProvider {
         error: (error as Error).message,
       };
     }
+  }
+
+  /**
+   * Obtiene los métodos de cobro disponibles
+   * Útil para el frontend
+   */
+  async getCollectionMethods(): Promise<CollectionMethod[]> {
+    const result = await this.apiClient.get<{ collections: CollectionMethod[] }>(
+      "/v1/collection-method"
+    );
+    return result.collections;
   }
 }
 

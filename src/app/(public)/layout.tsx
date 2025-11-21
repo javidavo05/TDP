@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { UniversalThemeToggle } from "@/components/ui/UniversalThemeToggle";
 import { UserAvatar } from "@/components/profile/UserAvatar";
 import { useAuth } from "@/hooks/useAuth";
@@ -11,6 +12,37 @@ export default function PublicLayout({
   children: React.ReactNode;
 }) {
   const { user, isAuthenticated, loading } = useAuth();
+
+  useEffect(() => {
+    // Register Public manifest
+    const link = document.createElement("link");
+    link.rel = "manifest";
+    link.href = "/manifest.json";
+    document.head.appendChild(link);
+
+    // Register Public service worker (only if not already registered by next-pwa)
+    if ("serviceWorker" in navigator && process.env.NODE_ENV === "production") {
+      navigator.serviceWorker
+        .register("/sw.js", { scope: "/" })
+        .then((registration) => {
+          console.log("Public Service Worker registered:", registration);
+        })
+        .catch((error) => {
+          console.error("Public Service Worker registration failed:", error);
+        });
+    }
+
+    // Set favicon for public
+    const favicon = document.querySelector("link[rel='icon']") as HTMLLinkElement;
+    if (favicon) {
+      favicon.href = "/favicon-icon.png";
+    } else {
+      const newFavicon = document.createElement("link");
+      newFavicon.rel = "icon";
+      newFavicon.href = "/favicon-icon.png";
+      document.head.appendChild(newFavicon);
+    }
+  }, []);
   
   return (
     <div className="min-h-screen bg-background">

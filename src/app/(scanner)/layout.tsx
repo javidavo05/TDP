@@ -30,6 +30,17 @@ export default function ScannerLayout({
         });
     }
 
+    // Set favicon for Scanner
+    const favicon = document.querySelector("link[rel='icon']") as HTMLLinkElement;
+    if (favicon) {
+      favicon.href = "/favicon-scanner.png";
+    } else {
+      const newFavicon = document.createElement("link");
+      newFavicon.rel = "icon";
+      newFavicon.href = "/favicon-scanner.png";
+      document.head.appendChild(newFavicon);
+    }
+
     // Check authentication and role (driver or assistant)
     const checkAuth = async () => {
       const supabase = createClient();

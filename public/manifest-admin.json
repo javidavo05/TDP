@@ -1,0 +1,70 @@
+{
+  "name": "TDP Admin Dashboard",
+  "short_name": "TDP Admin",
+  "description": "Panel de administración del sistema de ticketing TDP",
+  "start_url": "/dashboard",
+  "scope": "/dashboard",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#8b5cf6",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/icon-admin-16x16.png",
+      "sizes": "16x16",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-admin-32x32.png",
+      "sizes": "32x32",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-admin-96x96.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-admin-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-admin-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "productivity", "utilities"],
+  "shortcuts": [
+    {
+      "name": "Dashboard",
+      "short_name": "Dashboard",
+      "description": "Ir al panel de control",
+      "url": "/dashboard",
+      "icons": [{ "src": "/icon-admin-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Horarios",
+      "short_name": "Horarios",
+      "description": "Gestionar horarios",
+      "url": "/dashboard/schedules",
+      "icons": [{ "src": "/icon-admin-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Buses",
+      "short_name": "Buses",
+      "description": "Gestionar buses",
+      "url": "/dashboard/buses",
+      "icons": [{ "src": "/icon-admin-192x192.png", "sizes": "192x192" }]
+    }
+  ],
+  "permissions": [],
+  "prefer_related_applications": false
+}
+
