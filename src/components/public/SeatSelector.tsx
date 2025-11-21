@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import { ArrowUp, ArrowDown, Accessibility, Layers } from "lucide-react";
+import { useState, useEffect, useMemo, useRef } from "react";
+import { Accessibility, Layers } from "lucide-react";
 
 export type SeatStatus = "available" | "sold" | "selected" | "locked" | "disabled" | "extra_space" | "stair" | "aisle";
 
@@ -18,8 +18,27 @@ interface Seat {
   isAvailable: boolean;
   isSelected?: boolean;
   isLocked?: boolean;
-  lockedBy?: string; // User/session ID that locked this seat
-  lockedUntil?: Date; // When the lock expires
+  lockedBy?: string;
+  lockedUntil?: Date;
+}
+
+interface BusElement {
+  id: string;
+  type: "frontDoor" | "rearDoor";
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  floor: number;
+}
+
+interface FreeSpaceElement {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  floor: number;
 }
 
 interface SeatSelectorProps {
@@ -30,11 +49,36 @@ interface SeatSelectorProps {
   tripId: string;
   className?: string;
   showLegend?: boolean;
+  busElements?: BusElement[];
+  freeSpaces?: FreeSpaceElement[];
 }
 
-const SEAT_WIDTH = 48;
-const SEAT_HEIGHT = 48;
-const AISLE_WIDTH = 60;
+// Canvas dimensions match SVG viewBox
+const CANVAS_WIDTH = 4200;
+const CANVAS_HEIGHT = 2550;
+const SEAT_WIDTH = 180;
+const SEAT_HEIGHT = 134;
+
+// Size multipliers (same as builder)
+const sizeMultipliers = {
+  doors: 1,
+  stairs: 1,
+  seats: 1,
+};
+
+const getSeatWidth = (type: string): number => {
+  if (type === "double") return SEAT_WIDTH * 1.5;
+  if (type === "aisle") return SEAT_WIDTH * 0.3;
+  if (type === "stair") return SEAT_WIDTH * 0.6;
+  return SEAT_WIDTH;
+};
+
+const getSeatSize = (seat: Seat): { width: number; height: number } => {
+  return {
+    width: getSeatWidth(seat.type),
+    height: SEAT_HEIGHT,
+  };
+};
 
 export function SeatSelector({
   seats,
@@ -44,42 +88,97 @@ export function SeatSelector({
   tripId,
   className = "",
   showLegend = true,
+  busElements = [],
+  freeSpaces = [],
 }: SeatSelectorProps) {
   const [hoveredSeat, setHoveredSeat] = useState<string | null>(null);
+  const [svgTemplate, setSvgTemplate] = useState<string>("");
+  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
+  const containerRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
 
-  // Organize seats into rows for better visualization (ALBusSeatView style)
-  const organizedSeats = useMemo(() => {
-    // Group by approximate row (based on Y position)
-    const rows: Seat[][] = [];
-    const rowThreshold = SEAT_HEIGHT + 8;
+  // Calculate canvas size to fit viewport
+  useEffect(() => {
+    if (!containerRef.current) return;
     
-    seats.forEach(seat => {
-      const rowIndex = Math.floor(seat.y / rowThreshold);
-      if (!rows[rowIndex]) rows[rowIndex] = [];
-      rows[rowIndex].push(seat);
-    });
+    const calculateCanvasSize = () => {
+      const container = containerRef.current;
+      if (!container) return;
+      
+      const containerWidth = container.clientWidth;
+      const containerHeight = container.clientHeight;
+      
+      if (containerWidth === 0 || containerHeight === 0) return;
+      
+      // Canvas logical dimensions (matches SVG viewBox: 4200x2550)
+      const canvasAspectRatio = CANVAS_WIDTH / CANVAS_HEIGHT;
+      
+      // Calculate maximum size that fits in viewport
+      let maxWidth = containerWidth;
+      let maxHeight = maxWidth / canvasAspectRatio;
+      
+      if (maxHeight > containerHeight) {
+        maxHeight = containerHeight;
+        maxWidth = maxHeight * canvasAspectRatio;
+      }
+      
+      setCanvasSize({ width: maxWidth, height: maxHeight });
+    };
     
-    // Sort each row by X position
-    rows.forEach(row => row.sort((a, b) => a.x - b.x));
+    calculateCanvasSize();
     
-    return rows.flat();
-  }, [seats]);
+    const resizeObserver = new ResizeObserver(calculateCanvasSize);
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current);
+    }
+    
+    window.addEventListener('resize', calculateCanvasSize);
+    
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener('resize', calculateCanvasSize);
+    };
+  }, []);
 
-  if (!seats || seats.length === 0) {
-    return (
-      <div className={`flex items-center justify-center p-12 bg-muted rounded-lg ${className}`}>
-        <p className="text-muted-foreground">No hay asientos disponibles</p>
-      </div>
-    );
-  }
+  // Load SVG on mount
+  useEffect(() => {
+    fetch('/SVG_layout/layout bus.svg')
+      .then(res => res.text())
+      .then(svg => {
+        let svgContent = svg.replace(/<\?xml[^>]*\?>/, '').replace(/<!DOCTYPE[^>]*>/, '').trim();
+        
+        svgContent = svgContent.replace(
+          /width="[^"]*"/,
+          'width="100%"'
+        ).replace(
+          /height="[^"]*"/,
+          'height="100%"'
+        );
+        
+        if (!svgContent.includes('preserveAspectRatio')) {
+          svgContent = svgContent.replace(
+            /<svg([^>]*)>/,
+            `<svg$1 preserveAspectRatio="xMidYMid meet">`
+          );
+        }
+        
+        setSvgTemplate(svgContent);
+      })
+      .catch(err => {
+        console.error('Error loading SVG:', err);
+      });
+  }, []);
 
-  // Calculate canvas dimensions
-  const maxX = Math.max(...seats.map((s) => s.x)) + 100;
-  const maxY = Math.max(...seats.map((s) => s.y)) + 100;
-  const scale = Math.min(800 / maxX, 600 / maxY, 1);
+  // Coordinate conversion functions
+  const getScaleX = () => canvasSize.width / CANVAS_WIDTH;
+  const getScaleY = () => canvasSize.height / CANVAS_HEIGHT;
+  
+  const logicalToPhysicalX = (logicalX: number) => logicalX * getScaleX();
+  const logicalToPhysicalY = (logicalY: number) => logicalY * getScaleY();
+  const logicalToPhysicalWidth = (logicalWidth: number) => logicalWidth * getScaleX();
+  const logicalToPhysicalHeight = (logicalHeight: number) => logicalHeight * getScaleY();
 
   const getSeatColor = (seat: Seat): string => {
-    // Priority order: selected > locked > sold > disabled > extra_space > stair > available
     if (seat.id === selectedSeatId) {
       return "bg-primary text-primary-foreground ring-2 ring-primary ring-offset-2";
     }
@@ -107,13 +206,6 @@ export function SeatSelector({
     return "bg-green-500 text-white hover:bg-green-600 cursor-pointer";
   };
 
-  const getSeatSize = (seat: Seat): string => {
-    if (seat.type === "double") return "w-16 h-12";
-    if (seat.type === "aisle") return "w-8 h-12";
-    if (seat.type === "stair") return "w-10 h-12";
-    return "w-12 h-12";
-  };
-
   const getSeatIcon = (seat: Seat) => {
     if (seat.type === "disabled") return <Accessibility className="w-4 h-4" />;
     if (seat.type === "stair") return <Layers className="w-4 h-4" />;
@@ -131,51 +223,93 @@ export function SeatSelector({
     );
   };
 
+  if (!seats || seats.length === 0) {
+    return (
+      <div className={`flex items-center justify-center p-12 bg-muted rounded-lg ${className}`}>
+        <p className="text-muted-foreground">No hay asientos disponibles</p>
+      </div>
+    );
+  }
+
   return (
-    <div className={`relative bg-muted/30 rounded-lg p-6 overflow-auto ${className}`}>
+    <div 
+      ref={containerRef}
+      className={`relative bg-muted/30 rounded-lg p-6 overflow-auto flex items-center justify-center ${className}`}
+      style={{ minHeight: '600px', width: '100%' }}
+    >
+      {/* SVG Background */}
+      {svgTemplate && canvasSize.width > 0 && canvasSize.height > 0 && (
+        <div
+          className="absolute"
+          style={{
+            width: `${canvasSize.width}px`,
+            height: `${canvasSize.height}px`,
+            zIndex: 0,
+          }}
+          dangerouslySetInnerHTML={{ __html: svgTemplate }}
+        />
+      )}
+
+      {/* Interactive Canvas */}
       <div
-        className="relative mx-auto"
+        ref={canvasRef}
+        className="absolute"
         style={{
-          width: `${maxX * scale}px`,
-          height: `${maxY * scale}px`,
-          minHeight: "400px",
+          width: `${canvasSize.width}px`,
+          height: `${canvasSize.height}px`,
+          zIndex: 10,
         }}
       >
-        {/* Bus outline with central aisle (ALBusSeatView style) */}
-        <div className="absolute inset-0 border-4 border-primary/20 rounded-lg bg-card/50">
-          {/* Central aisle/hall */}
-          <div 
-            className="absolute top-0 bottom-0 left-1/2 transform -translate-x-1/2 border-l-2 border-r-2 border-dashed border-primary/30 bg-primary/5"
-            style={{ width: `${AISLE_WIDTH * scale}px` }}
-          >
-            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-xs text-primary/60 font-semibold rotate-90 whitespace-nowrap">
-              PASILLO
+        {/* Bus Elements - Doors */}
+        {busElements.map((element) => {
+          let label = "";
+          
+          if (element.type === "frontDoor") {
+            label = "ENTRADA";
+          } else if (element.type === "rearDoor") {
+            label = "SALIDA";
+          }
+          
+          return (
+            <div
+              key={element.id}
+              className="absolute bg-gray-50 border-dashed border-gray-400 rounded flex items-center justify-center"
+              style={{
+                left: `${logicalToPhysicalX(element.x)}px`,
+                top: `${logicalToPhysicalY(element.y)}px`,
+                width: `${logicalToPhysicalWidth(element.width * sizeMultipliers.doors)}px`,
+                height: `${logicalToPhysicalHeight(element.height * sizeMultipliers.doors)}px`,
+                transform: "translateY(-50%)",
+              }}
+            >
+              <div className="text-[10px] font-semibold text-gray-600 text-center whitespace-nowrap">
+                {label}
+              </div>
             </div>
-          </div>
-        </div>
+          );
+        })}
 
-        {/* Front indicator */}
-        <div className="absolute top-2 left-1/2 transform -translate-x-1/2 z-20">
-          <div className="flex items-center gap-2 bg-primary/90 text-primary-foreground px-3 py-1 rounded-lg shadow-lg text-xs">
-            <ArrowUp className="w-4 h-4" />
-            <span className="font-bold">FRENTE</span>
-            <ArrowUp className="w-4 h-4" />
-          </div>
-        </div>
-
-        {/* Rear indicator */}
-        <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 z-20">
-          <div className="flex items-center gap-2 bg-muted/90 text-foreground px-3 py-1 rounded-lg shadow-lg border-2 border-border text-xs">
-            <ArrowDown className="w-4 h-4" />
-            <span className="font-bold">TRASERA</span>
-            <ArrowDown className="w-4 h-4" />
-          </div>
-        </div>
+        {/* Free Space Elements */}
+        {freeSpaces.map((freeSpace) => {
+          return (
+            <div
+              key={freeSpace.id}
+              className="absolute bg-transparent border-2 border-dashed border-gray-400 rounded"
+              style={{
+                left: `${logicalToPhysicalX(freeSpace.x)}px`,
+                top: `${logicalToPhysicalY(freeSpace.y)}px`,
+                width: `${logicalToPhysicalWidth(freeSpace.width)}px`,
+                height: `${logicalToPhysicalHeight(freeSpace.height)}px`,
+              }}
+            />
+          );
+        })}
 
         {/* Seats */}
-        {organizedSeats.map((seat) => {
+        {seats.map((seat) => {
           const clickable = isSeatClickable(seat);
           const isSelected = seat.id === selectedSeatId;
+          const seatSize = getSeatSize(seat);
           
           return (
             <button
@@ -184,12 +318,17 @@ export function SeatSelector({
               onMouseEnter={() => clickable && setHoveredSeat(seat.id)}
               onMouseLeave={() => setHoveredSeat(null)}
               disabled={!clickable}
-              className={`absolute ${getSeatSize(seat)} ${getSeatColor(seat)} rounded transition-all duration-200 flex items-center justify-center text-xs font-semibold shadow-md hover:shadow-lg hover:scale-110 disabled:hover:scale-100 disabled:cursor-not-allowed ${
+              className={`absolute ${getSeatColor(seat)} rounded transition-all duration-200 flex items-center justify-center text-xs font-semibold shadow-md hover:shadow-lg hover:scale-110 disabled:hover:scale-100 disabled:cursor-not-allowed ${
                 isSelected ? "animate-pulse" : ""
               }`}
               style={{
-                left: `${seat.x * scale}px`,
-                top: `${seat.y * scale}px`,
+                left: `${logicalToPhysicalX(seat.x)}px`,
+                top: `${logicalToPhysicalY(seat.y)}px`,
+                width: `${logicalToPhysicalWidth(seatSize.width)}px`,
+                height: `${logicalToPhysicalHeight(seatSize.height)}px`,
+                ...(seat.type === "stair" ? {
+                  backgroundImage: "repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255, 255, 255, 0.2) 4px, rgba(255, 255, 255, 0.2) 8px)",
+                } : {}),
               }}
               title={`Asiento ${seat.number} - ${
                 seat.status === "sold" ? "Vendido" :
@@ -248,4 +387,3 @@ export function SeatSelector({
     </div>
   );
 }
-

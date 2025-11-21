@@ -22,6 +22,8 @@ export default function TripDetailPage() {
   const router = useRouter();
   const [trip, setTrip] = useState<any>(null);
   const [seats, setSeats] = useState<Seat[]>([]);
+  const [busElements, setBusElements] = useState<any[]>([]);
+  const [freeSpaces, setFreeSpaces] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedSeat, setSelectedSeat] = useState<string | null>(null);
 
@@ -68,6 +70,8 @@ export default function TripDetailPage() {
           isAvailable: seat.isAvailable !== false && !data.occupiedSeatIds?.includes(seat.id),
         }));
         setSeats(transformedSeats);
+        setBusElements(data.busElements || []);
+        setFreeSpaces(data.freeSpaces || []);
       }
     } catch (error) {
       console.error("Error fetching seats:", error);
@@ -122,6 +126,8 @@ export default function TripDetailPage() {
                   onSeatSelect={handleSeatSelect}
                   tripId={params.id as string}
                   showLegend={true}
+                  busElements={busElements}
+                  freeSpaces={freeSpaces}
                 />
               ) : (
                 <div className="bg-muted p-8 rounded-lg text-center">

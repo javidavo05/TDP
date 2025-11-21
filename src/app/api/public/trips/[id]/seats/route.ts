@@ -66,6 +66,8 @@ export async function GET(
       occupiedSeats: occupiedSeatIds.size,
       seats: seatsWithAvailability,
       occupiedSeatIds: Array.from(occupiedSeatIds), // Include as array for easier use
+      busElements: busSeatMap.busElements || [],
+      freeSpaces: busSeatMap.freeSpaces || [],
     });
   } catch (error) {
     console.error("Error in GET /api/public/trips/[id]/seats:", error);
