@@ -34,7 +34,7 @@ interface Bus {
   };
   mechanicalNotes: string | null;
   seatMap: {
-    seats: Seat[];
+    seats: Array<Seat & { floor?: number }>;
   };
   isActive: boolean;
   createdAt: string;
