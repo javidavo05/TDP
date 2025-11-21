@@ -81,6 +81,8 @@ export async function GET(request: NextRequest) {
               id: user.id, // Use user id as fallback
               company_name: companyName,
               user_id: user.id,
+              phone: null,
+              email: user.email || null,
             };
           } else {
             owner = newOwner;

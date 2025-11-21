@@ -19,6 +19,8 @@ interface BusOwner {
   id: string;
   company_name: string;
   user_id: string;
+  phone?: string | null;
+  email?: string | null;
   user?: {
     id: string;
     full_name: string | null;
