@@ -638,8 +638,10 @@ export default function BusDetailPage() {
           <div className="bg-card border border-border rounded-xl p-8 shadow-lg">
             <h2 className="text-2xl font-semibold mb-6">Editor de Mapa de Asientos</h2>
             <SeatMapEditor
-              initialSeats={seats as any}
-              onSeatsChange={handleSeatsChange as any}
+              initialSeats={seats.map(s => ({ ...s, floor: s.floor || 1 })) as any}
+              onSeatsChange={(newSeats: any) => {
+                setSeats(newSeats.map((s: any) => ({ ...s, floor: s.floor || 1 })));
+              }}
               initialLayout={layout}
               onLayoutChange={setLayout}
             />
