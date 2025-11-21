@@ -49,6 +49,9 @@ export class BusService {
     }
 
     // Merge existing data with updates
+    // For seatMap, if provided, completely replace it (don't merge)
+    const seatMap = data.seatMap !== undefined ? data.seatMap : existingBus.seatMap;
+    
     const updatedBus = new Bus(
       existingBus.id,
       existingBus.ownerId,
@@ -58,7 +61,7 @@ export class BusService {
       data.model !== undefined ? data.model : existingBus.model,
       data.year !== undefined ? data.year : existingBus.year,
       data.capacity ?? existingBus.capacity,
-      data.seatMap ?? existingBus.seatMap,
+      seatMap,
       data.busClass ?? existingBus.busClass,
       data.features ?? existingBus.features,
       data.mechanicalNotes !== undefined ? data.mechanicalNotes : existingBus.mechanicalNotes,

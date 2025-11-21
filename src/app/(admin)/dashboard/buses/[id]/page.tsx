@@ -35,6 +35,8 @@ interface Bus {
   mechanicalNotes: string | null;
   seatMap: {
     seats: Array<Seat & { floor?: number }>;
+    busElements?: any[];
+    freeSpaces?: any[];
   };
   isActive: boolean;
   createdAt: string;
@@ -107,6 +109,13 @@ export default function BusDetailPage() {
       if (bus.seatMap && 'visualLayout' in bus.seatMap && bus.seatMap.visualLayout) {
         setLayout(bus.seatMap.visualLayout as any);
       }
+      // Load bus elements and free spaces from seatMap
+      if (bus.seatMap?.busElements) {
+        setBusElements(bus.seatMap.busElements);
+      }
+      if (bus.seatMap?.freeSpaces) {
+        setFreeSpaces(bus.seatMap.freeSpaces);
+      }
       fetchAssignmentChanges();
     }
   }, [bus]);
@@ -177,6 +186,8 @@ export default function BusDetailPage() {
             column: seat.column,
             floor: seat.floor || 1,
           })),
+          busElements: busElements,
+          freeSpaces: freeSpaces,
         },
         isActive: formData.isActive,
       };
@@ -644,6 +655,10 @@ export default function BusDetailPage() {
               }}
               initialLayout={layout}
               onLayoutChange={setLayout}
+              initialBusElements={busElements}
+              onBusElementsChange={setBusElements}
+              initialFreeSpaces={freeSpaces}
+              onFreeSpacesChange={setFreeSpaces}
             />
           </div>
         )}

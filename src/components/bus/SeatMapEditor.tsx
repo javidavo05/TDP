@@ -57,6 +57,10 @@ interface SeatMapEditorProps {
   onSeatsChange: (seats: Seat[]) => void;
   initialLayout?: LayoutShape[];
   onLayoutChange?: (layout: LayoutShape[]) => void;
+  initialBusElements?: BusElement[];
+  onBusElementsChange?: (elements: BusElement[]) => void;
+  initialFreeSpaces?: FreeSpaceElement[];
+  onFreeSpacesChange?: (freeSpaces: FreeSpaceElement[]) => void;
   className?: string;
 }
 
@@ -120,6 +124,10 @@ export function SeatMapEditor({
   onSeatsChange, 
   initialLayout = [],
   onLayoutChange,
+  initialBusElements = [],
+  onBusElementsChange,
+  initialFreeSpaces = [],
+  onFreeSpacesChange,
   className = "" 
 }: SeatMapEditorProps) {
   const [seats, setSeats] = useState<Seat[]>(
@@ -133,10 +141,36 @@ export function SeatMapEditor({
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 }); // Actual rendered size
   
   // Bus elements (doors) as editable elements - now optional, user can add them
-  const [busElements, setBusElements] = useState<BusElement[]>([]);
+  const [busElements, setBusElements] = useState<BusElement[]>(initialBusElements || []);
 
   // Free space elements (rectangles)
-  const [freeSpaces, setFreeSpaces] = useState<FreeSpaceElement[]>([]);
+  const [freeSpaces, setFreeSpaces] = useState<FreeSpaceElement[]>(initialFreeSpaces || []);
+  
+  // Initialize bus elements and free spaces from props when they change
+  useEffect(() => {
+    if (initialBusElements && initialBusElements.length >= 0) {
+      setBusElements(initialBusElements);
+    }
+  }, [initialBusElements]);
+  
+  useEffect(() => {
+    if (initialFreeSpaces && initialFreeSpaces.length >= 0) {
+      setFreeSpaces(initialFreeSpaces);
+    }
+  }, [initialFreeSpaces]);
+  
+  // Notify parent of changes to bus elements and free spaces
+  useEffect(() => {
+    if (onBusElementsChange) {
+      onBusElementsChange(busElements);
+    }
+  }, [busElements, onBusElementsChange]);
+  
+  useEffect(() => {
+    if (onFreeSpacesChange) {
+      onFreeSpacesChange(freeSpaces);
+    }
+  }, [freeSpaces, onFreeSpacesChange]);
   const [creatingFreeSpace, setCreatingFreeSpace] = useState(false);
   const [freeSpaceStart, setFreeSpaceStart] = useState<{ x: number; y: number } | null>(null);
   const [freeSpaceCurrent, setFreeSpaceCurrent] = useState<{ x: number; y: number } | null>(null);
