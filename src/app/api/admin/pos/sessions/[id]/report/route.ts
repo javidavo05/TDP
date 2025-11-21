@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { POSTerminalRepository } from "@/infrastructure/db/supabase/POSTerminalRepository";
 import { POSCashSessionRepository } from "@/infrastructure/db/supabase/POSCashSessionRepository";
 import { POSTransactionRepository } from "@/infrastructure/db/supabase/POSTransactionRepository";
+import { CashCountRepository } from "@/infrastructure/db/supabase/CashCountRepository";
 import { CashRegisterService } from "@/services/pos/CashRegisterService";
 
 export const dynamic = 'force-dynamic';
@@ -10,10 +11,12 @@ export const dynamic = 'force-dynamic';
 const terminalRepository = new POSTerminalRepository();
 const sessionRepository = new POSCashSessionRepository();
 const transactionRepository = new POSTransactionRepository();
+const cashCountRepository = new CashCountRepository();
 const cashRegisterService = new CashRegisterService(
   terminalRepository,
   sessionRepository,
-  transactionRepository
+  transactionRepository,
+  cashCountRepository
 );
 
 async function checkAuth() {
