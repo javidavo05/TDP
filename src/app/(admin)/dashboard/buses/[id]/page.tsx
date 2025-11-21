@@ -98,8 +98,8 @@ export default function BusDetailPage() {
       if (bus.seatMap?.seats) {
         setSeats(bus.seatMap.seats);
       }
-      if (bus.seatMap?.visualLayout) {
-        setLayout(bus.seatMap.visualLayout);
+      if (bus.seatMap && 'visualLayout' in bus.seatMap && bus.seatMap.visualLayout) {
+        setLayout(bus.seatMap.visualLayout as any);
       }
       fetchAssignmentChanges();
     }
