@@ -2,7 +2,17 @@
 
 import { useState, useEffect } from "react";
 import { SeatLegend } from "./SeatLegend";
-import { Seat } from "@/domain/entities/Seat";
+// Seat type is defined inline in SeatMapEditor, using that structure
+type Seat = {
+  id: string;
+  number: string;
+  x: number;
+  y: number;
+  type: "single" | "double" | "aisle" | "disabled" | "extra_space" | "stair" | "bathroom";
+  row: number;
+  column: number;
+  floor: number;
+};
 
 interface SeatSelectorViewProps {
   tripId: string;
