@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { resolve } from "path";
 import { PWA_CONFIGS, type PWAType } from "@/config/pwa-icons";
