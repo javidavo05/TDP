@@ -38,6 +38,7 @@ export class Ticket {
     boardingStopId?: string;
     passengerId?: string;
     passengerDocumentId?: string;
+    posSessionId?: string;
   }): Ticket {
     const now = new Date();
     const qrCode = Ticket.generateQRCode();
@@ -62,7 +63,7 @@ export class Ticket {
       null,
       data.passengerId || null,
       data.passengerDocumentId || null,
-      data.posSessionId || null,
+      (data as any).posSessionId || null,
       now,
       now
     );
