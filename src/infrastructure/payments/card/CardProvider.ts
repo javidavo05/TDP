@@ -1,12 +1,5 @@
 import { IPaymentProvider } from "@/domain/interfaces";
-import { PaymentMethod, PaymentStatus } from "@/domain/types";
-
-export interface CardProviderResponse {
-  status: PaymentStatus;
-  transactionId?: string;
-  error?: string;
-  metadata?: Record<string, unknown>;
-}
+import { PaymentMethod, PaymentStatus, PaymentProviderResponse } from "@/domain/types";
 
 export class CardProvider implements IPaymentProvider {
   private isSimulated: boolean = true; // Set to false when integrating real POS terminal
@@ -63,10 +56,11 @@ export class CardProvider implements IPaymentProvider {
     metadata?: Record<string, unknown>;
   }> {
     // In production, verify with POS terminal or payment processor
-    return {
-      status: "completed",
-      transactionId,
-    };
+      return {
+        status: "completed",
+        transactionId,
+        amount: 0, // Amount not available in verification
+      };
   }
 
   async refund(transactionId: string, amount: number): Promise<{
