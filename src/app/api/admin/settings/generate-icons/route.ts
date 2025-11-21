@@ -34,7 +34,7 @@ async function checkAdminAuth() {
   return user;
 }
 
-export async function POST(request: NextRequest) {
+export async function POST() {
   try {
     await checkAdminAuth();
 
