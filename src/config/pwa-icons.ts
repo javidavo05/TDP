@@ -22,10 +22,10 @@ export const PWA_CONFIGS: Record<PWAType, PWAIconConfig> = {
     name: "TDP Ticketing System",
     shortName: "TDP Tickets",
     description: "Sistema de ticketing de transporte nacional - Compra boletos de bus en línea",
-    themeColor: "#3b82f6",
+    themeColor: "#ef4444",
     backgroundColor: "#ffffff",
-    primaryColor: "#3b82f6", // Azul primario
-    secondaryColor: "#2563eb", // Azul secundario
+    primaryColor: "#ef4444", // Rojo primario
+    secondaryColor: "#dc2626", // Rojo secundario
     text: "TDP",
     iconPrefix: "icon",
   },
@@ -33,10 +33,10 @@ export const PWA_CONFIGS: Record<PWAType, PWAIconConfig> = {
     name: "TDP Admin Dashboard",
     shortName: "TDP Admin",
     description: "Panel de administración del sistema de ticketing TDP",
-    themeColor: "#8b5cf6",
+    themeColor: "#f59e0b",
     backgroundColor: "#ffffff",
-    primaryColor: "#8b5cf6", // Morado primario
-    secondaryColor: "#7c3aed", // Morado secundario
+    primaryColor: "#f59e0b", // Naranja primario
+    secondaryColor: "#d97706", // Naranja secundario
     text: "ADM",
     iconPrefix: "icon-admin",
   },
@@ -44,10 +44,10 @@ export const PWA_CONFIGS: Record<PWAType, PWAIconConfig> = {
     name: "TDP POS Terminal",
     shortName: "TDP POS",
     description: "Terminal de punto de venta para sistema de ticketing TDP",
-    themeColor: "#3b82f6",
-    backgroundColor: "#1e293b",
-    primaryColor: "#3b82f6", // Azul primario
-    secondaryColor: "#2563eb", // Azul secundario
+    themeColor: "#06b6d4",
+    backgroundColor: "#0f172a",
+    primaryColor: "#06b6d4", // Cyan primario
+    secondaryColor: "#0891b2", // Cyan secundario
     text: "POS",
     iconPrefix: "icon-pos",
   },
@@ -55,10 +55,10 @@ export const PWA_CONFIGS: Record<PWAType, PWAIconConfig> = {
     name: "TDP Ticket Scanner",
     shortName: "TDP Scanner",
     description: "Escáner de códigos QR para validación de boletos TDP",
-    themeColor: "#10b981",
+    themeColor: "#a855f7",
     backgroundColor: "#000000",
-    primaryColor: "#10b981", // Verde primario
-    secondaryColor: "#059669", // Verde secundario
+    primaryColor: "#a855f7", // Púrpura primario
+    secondaryColor: "#9333ea", // Púrpura secundario
     text: "QR",
     iconPrefix: "icon-scanner",
   },

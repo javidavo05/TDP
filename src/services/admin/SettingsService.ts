@@ -24,6 +24,25 @@ export interface GeneralConfig {
   language: string;
 }
 
+export interface PWAIconConfig {
+  name: string;
+  shortName: string;
+  description: string;
+  themeColor: string;
+  backgroundColor: string;
+  primaryColor: string;
+  secondaryColor: string;
+  text: string;
+  iconPrefix: string;
+}
+
+export interface PWAIconsConfig {
+  public: PWAIconConfig;
+  admin: PWAIconConfig;
+  pos: PWAIconConfig;
+  scanner: PWAIconConfig;
+}
+
 export class SettingsService {
   constructor(private repository: SettingsRepository) {}
 
@@ -96,6 +115,27 @@ export class SettingsService {
     ]);
 
     return { payment, email, general };
+  }
+
+  async getPWAIconsConfig(): Promise<PWAIconsConfig | null> {
+    const setting = await this.repository.get("pwa_icons");
+    return setting ? (setting.value as PWAIconsConfig) : null;
+  }
+
+  async updatePWAIconsConfig(config: PWAIconsConfig): Promise<void> {
+    // Validate color formats
+    const colorRegex = /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/;
+    const pwas: Array<keyof PWAIconsConfig> = ["public", "admin", "pos", "scanner"];
+    
+    for (const pwa of pwas) {
+      const pwaConfig = config[pwa];
+      if (!colorRegex.test(pwaConfig.primaryColor) || !colorRegex.test(pwaConfig.secondaryColor) || 
+          !colorRegex.test(pwaConfig.themeColor) || !colorRegex.test(pwaConfig.backgroundColor)) {
+        throw new Error(`Invalid color format for ${pwa} PWA`);
+      }
+    }
+
+    await this.repository.set("pwa_icons", config, "pwa_icons", "PWA icons configuration");
   }
 
   async getSetting(key: string): Promise<SystemSetting | null> {

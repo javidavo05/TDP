@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
   try {
     await checkAdminAuth();
 
-    const category = request.nextUrl.searchParams.get("category") as "payment" | "email" | "general" | null;
+    const category = request.nextUrl.searchParams.get("category") as "payment" | "email" | "general" | "pwa_icons" | null;
 
     if (category) {
       let data;
@@ -49,6 +49,9 @@ export async function GET(request: NextRequest) {
           break;
         case "general":
           data = await settingsService.getGeneralConfig();
+          break;
+        case "pwa_icons":
+          data = await settingsService.getPWAIconsConfig();
           break;
         default:
           return NextResponse.json({ error: "Invalid category" }, { status: 400 });
@@ -93,6 +96,9 @@ export async function PUT(request: NextRequest) {
         break;
       case "general":
         await settingsService.updateGeneralConfig(configData);
+        break;
+      case "pwa_icons":
+        await settingsService.updatePWAIconsConfig(configData);
         break;
       default:
         return NextResponse.json({ error: "Invalid category" }, { status: 400 });

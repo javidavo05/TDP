@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { PWA_CONFIGS, type PWAType } from "@/config/pwa-icons";
 
 interface PaymentGatewayConfig {
   enabled: boolean;
@@ -27,7 +28,26 @@ interface GeneralConfig {
   language: string;
 }
 
-type SettingsTab = "payment" | "email" | "general";
+interface PWAIconConfig {
+  name: string;
+  shortName: string;
+  description: string;
+  themeColor: string;
+  backgroundColor: string;
+  primaryColor: string;
+  secondaryColor: string;
+  text: string;
+  iconPrefix: string;
+}
+
+interface PWAIconsConfig {
+  public: PWAIconConfig;
+  admin: PWAIconConfig;
+  pos: PWAIconConfig;
+  scanner: PWAIconConfig;
+}
+
+type SettingsTab = "payment" | "email" | "general" | "pwa_icons";
 
 export function SettingsPanel() {
   const [activeTab, setActiveTab] = useState<SettingsTab>("payment");
@@ -56,6 +76,10 @@ export function SettingsPanel() {
     language: "es",
   });
 
+  // PWA Icons state
+  const [pwaIconsConfig, setPwaIconsConfig] = useState<PWAIconsConfig>(PWA_CONFIGS);
+  const [generatingIcons, setGeneratingIcons] = useState(false);
+
   useEffect(() => {
     fetchSettings();
   }, []);
@@ -73,6 +97,15 @@ export function SettingsPanel() {
       if (data.payment) setPaymentGateways(data.payment);
       if (data.email) setEmailConfig(data.email);
       if (data.general) setGeneralConfig(data.general);
+      
+      // Load PWA icons config separately
+      const pwaIconsResponse = await fetch("/api/admin/settings?category=pwa_icons");
+      if (pwaIconsResponse.ok) {
+        const pwaIconsData = await pwaIconsResponse.json();
+        if (pwaIconsData.pwa_icons) {
+          setPwaIconsConfig(pwaIconsData.pwa_icons);
+        }
+      }
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -158,6 +191,71 @@ export function SettingsPanel() {
     }
   };
 
+  const handleSavePWAIcons = async () => {
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const response = await fetch("/api/admin/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          category: "pwa_icons",
+          data: pwaIconsConfig,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to save PWA icons configuration");
+      }
+
+      setSuccess("Configuración de iconos PWA guardada exitosamente");
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleGenerateIcons = async () => {
+    setGeneratingIcons(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      // First save the configuration
+      await handleSavePWAIcons();
+      
+      // Then generate icons
+      const response = await fetch("/api/admin/settings/generate-icons", {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to generate icons");
+      }
+
+      setSuccess("Iconos generados exitosamente. Recarga la página para ver los cambios.");
+      setTimeout(() => setSuccess(null), 5000);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setGeneratingIcons(false);
+    }
+  };
+
+  const updatePWAIconConfig = (pwa: PWAType, field: keyof PWAIconConfig, value: string) => {
+    setPwaIconsConfig((prev) => ({
+      ...prev,
+      [pwa]: {
+        ...prev[pwa],
+        [field]: value,
+      },
+    }));
+  };
+
   const updatePaymentGateway = (gateway: string, field: string, value: any) => {
     setPaymentGateways((prev) => ({
       ...prev,
@@ -226,6 +324,7 @@ export function SettingsPanel() {
             { id: "payment" as SettingsTab, label: "Pasarelas de Pago", icon: "💳" },
             { id: "email" as SettingsTab, label: "Email", icon: "📧" },
             { id: "general" as SettingsTab, label: "General", icon: "⚙️" },
+            { id: "pwa_icons" as SettingsTab, label: "Iconos PWA", icon: "🎨" },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -644,6 +743,176 @@ export function SettingsPanel() {
                 className="px-6 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-semibold"
               >
                 {saving ? "Guardando..." : "Guardar Configuración"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PWA Icons Tab */}
+      {activeTab === "pwa_icons" && (
+        <div className="space-y-6">
+          <div className="bg-card border border-border rounded-xl p-6 shadow-lg">
+            <div className="mb-6">
+              <h3 className="text-xl font-semibold mb-2">Configuración de Iconos PWA</h3>
+              <p className="text-sm text-muted-foreground">
+                Personaliza los colores y textos de los iconos para cada aplicación PWA
+              </p>
+            </div>
+
+            <div className="space-y-6">
+              {(["public", "admin", "pos", "scanner"] as PWAType[]).map((pwa) => {
+                const config = pwaIconsConfig[pwa];
+                const pwaNames: Record<PWAType, string> = {
+                  public: "Pública",
+                  admin: "Admin",
+                  pos: "POS",
+                  scanner: "Scanner",
+                };
+
+                return (
+                  <div key={pwa} className="border border-border rounded-lg p-6 space-y-4">
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="text-lg font-semibold">{pwaNames[pwa]}</h4>
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="w-12 h-12 rounded-lg border-2 border-border"
+                          style={{
+                            background: `linear-gradient(135deg, ${config.primaryColor} 0%, ${config.secondaryColor} 100%)`,
+                          }}
+                        />
+                        <span className="text-sm text-muted-foreground">{config.name}</span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Nombre</label>
+                        <input
+                          type="text"
+                          value={config.name}
+                          onChange={(e) => updatePWAIconConfig(pwa, "name", e.target.value)}
+                          className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Nombre Corto</label>
+                        <input
+                          type="text"
+                          value={config.shortName}
+                          onChange={(e) => updatePWAIconConfig(pwa, "shortName", e.target.value)}
+                          className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Texto del Icono</label>
+                        <input
+                          type="text"
+                          value={config.text}
+                          onChange={(e) => updatePWAIconConfig(pwa, "text", e.target.value)}
+                          className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                          maxLength={3}
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">Máximo 3 caracteres</p>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Color Primario</label>
+                        <div className="flex gap-2">
+                          <input
+                            type="color"
+                            value={config.primaryColor}
+                            onChange={(e) => updatePWAIconConfig(pwa, "primaryColor", e.target.value)}
+                            className="w-16 h-10 rounded border border-input cursor-pointer"
+                          />
+                          <input
+                            type="text"
+                            value={config.primaryColor}
+                            onChange={(e) => updatePWAIconConfig(pwa, "primaryColor", e.target.value)}
+                            className="flex-1 px-4 py-2 bg-background border border-input rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                            placeholder="#3b82f6"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Color Secundario</label>
+                        <div className="flex gap-2">
+                          <input
+                            type="color"
+                            value={config.secondaryColor}
+                            onChange={(e) => updatePWAIconConfig(pwa, "secondaryColor", e.target.value)}
+                            className="w-16 h-10 rounded border border-input cursor-pointer"
+                          />
+                          <input
+                            type="text"
+                            value={config.secondaryColor}
+                            onChange={(e) => updatePWAIconConfig(pwa, "secondaryColor", e.target.value)}
+                            className="flex-1 px-4 py-2 bg-background border border-input rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                            placeholder="#2563eb"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Color de Tema</label>
+                        <div className="flex gap-2">
+                          <input
+                            type="color"
+                            value={config.themeColor}
+                            onChange={(e) => updatePWAIconConfig(pwa, "themeColor", e.target.value)}
+                            className="w-16 h-10 rounded border border-input cursor-pointer"
+                          />
+                          <input
+                            type="text"
+                            value={config.themeColor}
+                            onChange={(e) => updatePWAIconConfig(pwa, "themeColor", e.target.value)}
+                            className="flex-1 px-4 py-2 bg-background border border-input rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                            placeholder="#3b82f6"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Color de Fondo</label>
+                        <div className="flex gap-2">
+                          <input
+                            type="color"
+                            value={config.backgroundColor}
+                            onChange={(e) => updatePWAIconConfig(pwa, "backgroundColor", e.target.value)}
+                            className="w-16 h-10 rounded border border-input cursor-pointer"
+                          />
+                          <input
+                            type="text"
+                            value={config.backgroundColor}
+                            onChange={(e) => updatePWAIconConfig(pwa, "backgroundColor", e.target.value)}
+                            className="flex-1 px-4 py-2 bg-background border border-input rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                            placeholder="#ffffff"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="pt-6 border-t border-border mt-6 flex gap-4">
+              <button
+                onClick={handleSavePWAIcons}
+                disabled={saving}
+                className="px-6 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-semibold"
+              >
+                {saving ? "Guardando..." : "Guardar Configuración"}
+              </button>
+              <button
+                onClick={handleGenerateIcons}
+                disabled={generatingIcons || saving}
+                className="px-6 py-2 bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-semibold"
+              >
+                {generatingIcons ? "Generando..." : "Generar Iconos"}
               </button>
             </div>
           </div>
