@@ -1806,6 +1806,10 @@ export function SeatMapEditor({
                     handleFreeSpaceDrag(e);
                   }
                 }
+                // Handle selection mode mouse move
+                if (isSelecting && selectionMode && editMode === "seats") {
+                  handleSelectionMove(e);
+                }
               }}
               onMouseUp={(e) => {
                 if (editMode === "seats") {
@@ -1849,16 +1853,6 @@ export function SeatMapEditor({
               onMouseDown={(e) => {
                 if (selectionMode && editMode === "seats") {
                   handleSelectionStart(e);
-                }
-              }}
-              onMouseMove={(e) => {
-                if (isSelecting) {
-                  handleSelectionMove(e);
-                }
-              }}
-              onMouseUp={() => {
-                if (isSelecting) {
-                  handleSelectionEnd();
                 }
               }}
             >
