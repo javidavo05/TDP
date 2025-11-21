@@ -298,7 +298,7 @@ export default function NewBusWizardPage() {
                 </div>
                 <div className="bg-card border border-border rounded-lg p-4">
             <SeatMapEditor
-              initialSeats={seats.map(s => ({ ...s, floor: s.floor || 1 })) as any}
+              initialSeats={seats.map((s: any) => ({ ...s, floor: (s as any).floor || 1 })) as any}
               onSeatsChange={(newSeats: any) => {
                 setSeats(newSeats.map((s: any) => ({ ...s, floor: s.floor || 1 })));
               }}
