@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
+import { UniversalThemeToggle } from "@/components/ui/UniversalThemeToggle";
 
 interface Trip {
   id: string;
@@ -110,11 +111,16 @@ export default function DeparturesDisplayPage() {
     <div className="min-h-screen bg-gradient-hero-light dark:bg-gradient-hero-dark p-8">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="text-center mb-12 animate-fadeInDown">
-          <h1 className="text-6xl font-bold mb-4 text-foreground">Salidas de Buses</h1>
-          <p className="text-2xl text-muted-foreground">
-            {format(new Date(), "EEEE, d 'de' MMMM 'de' yyyy", { locale: es })}
-          </p>
+        <div className="relative mb-12 animate-fadeInDown">
+          <div className="absolute top-0 right-0 z-10">
+            <UniversalThemeToggle />
+          </div>
+          <div className="text-center">
+            <h1 className="text-6xl font-bold mb-4 text-foreground">Salidas de Buses</h1>
+            <p className="text-2xl text-muted-foreground">
+              {format(new Date(), "EEEE, d 'de' MMMM 'de' yyyy", { locale: es })}
+            </p>
+          </div>
         </div>
 
         {/* Terminal Filter */}

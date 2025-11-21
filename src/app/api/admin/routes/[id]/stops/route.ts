@@ -57,7 +57,7 @@ export async function POST(
     }
 
     const body = await request.json();
-    const { name, kmPosition, orderIndex, priceAdjustment } = body;
+    const { name, kmPosition, orderIndex, price } = body;
 
     if (!name || kmPosition === undefined || orderIndex === undefined) {
       return NextResponse.json(
@@ -70,7 +70,7 @@ export async function POST(
       name,
       kmPosition,
       orderIndex,
-      priceAdjustment,
+      price, // Complete ticket price for this stop
     });
 
     return NextResponse.json({ stop }, { status: 201 });

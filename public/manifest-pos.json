@@ -1,0 +1,40 @@
+{
+  "name": "TDP POS Terminal",
+  "short_name": "TDP POS",
+  "description": "Terminal de punto de venta para sistema de ticketing TDP",
+  "start_url": "/pos",
+  "scope": "/pos",
+  "display": "standalone",
+  "background_color": "#1e293b",
+  "theme_color": "#3b82f6",
+  "orientation": "landscape",
+  "icons": [
+    {
+      "src": "/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "productivity"],
+  "shortcuts": [
+    {
+      "name": "Abrir Terminal",
+      "short_name": "Terminal",
+      "description": "Abrir terminal POS",
+      "url": "/pos",
+      "icons": [{ "src": "/icon-192x192.png", "sizes": "192x192" }]
+    }
+  ],
+  "permissions": [
+    "camera"
+  ],
+  "prefer_related_applications": false
+}
+

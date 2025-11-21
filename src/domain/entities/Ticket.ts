@@ -20,6 +20,7 @@ export class Ticket {
     public boardedAt: Date | null,
     public passengerId: string | null,
     public passengerDocumentId: string | null,
+    public posSessionId: string | null,
     public createdAt: Date,
     public updatedAt: Date
   ) {}
@@ -61,6 +62,7 @@ export class Ticket {
       null,
       data.passengerId || null,
       data.passengerDocumentId || null,
+      data.posSessionId || null,
       now,
       now
     );

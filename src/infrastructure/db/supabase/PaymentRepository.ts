@@ -110,6 +110,9 @@ export class PaymentRepository implements IPaymentRepository {
       data.provider_transaction_id,
       data.provider_response,
       data.processed_at ? new Date(data.processed_at) : null,
+      data.pos_session_id || null,
+      data.received_amount ? parseFloat(data.received_amount) : null,
+      parseFloat(data.change_amount || "0"),
       new Date(data.created_at),
       new Date(data.updated_at)
     );
@@ -127,6 +130,9 @@ export class PaymentRepository implements IPaymentRepository {
       provider_transaction_id: payment.providerTransactionId,
       provider_response: payment.providerResponse,
       processed_at: payment.processedAt?.toISOString() || null,
+      pos_session_id: payment.posSessionId,
+      received_amount: payment.receivedAmount?.toString() || null,
+      change_amount: payment.changeAmount.toString(),
     };
   }
 }

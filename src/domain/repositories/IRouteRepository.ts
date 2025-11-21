@@ -7,7 +7,7 @@ export interface RouteStop {
   name: string;
   kmPosition: number;
   orderIndex: number;
-  priceAdjustment: number;
+  price: number; // Complete ticket price for this stop (not an adjustment)
   createdAt: Date;
 }
 

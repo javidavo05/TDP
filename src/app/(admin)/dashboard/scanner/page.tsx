@@ -44,6 +44,7 @@ export default function AdminScannerPage() {
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [feedbackState, setFeedbackState] = useState<"success" | "error" | null>(null);
+  const [scannerKey, setScannerKey] = useState(0); // Key to force scanner remount
 
   useEffect(() => {
     // Load manifest from localStorage on mount
@@ -152,6 +153,7 @@ export default function AdminScannerPage() {
           setTicket(null);
           setFeedbackState(null);
           setSuccessMessage(null);
+          setScannerKey((prev) => prev + 1); // Force scanner remount
         }, 2000);
       } else {
         const errorData = await response.json();
@@ -181,6 +183,9 @@ export default function AdminScannerPage() {
     setScanned(false);
     setTicket(null);
     setError(null);
+    setSuccessMessage(null);
+    // Force scanner to reset by using a key
+    setScannerKey((prev) => prev + 1);
   };
 
   const clearManifest = () => {
@@ -259,7 +264,10 @@ export default function AdminScannerPage() {
               <div className="bg-card border border-border rounded-xl p-6 shadow-lg">
                 <h2 className="text-xl font-semibold mb-4">Escanear Código QR</h2>
                 <div className="bg-muted rounded-lg overflow-hidden">
-                  <QRScanner onScanSuccess={handleScanSuccess} />
+                  <QRScanner 
+                    onScanSuccess={handleScanSuccess}
+                    key={scannerKey} // Force remount when reset
+                  />
                 </div>
               </div>
             ) : (

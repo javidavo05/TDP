@@ -6,15 +6,20 @@ export class Bus {
     public ownerId: string,
     public presetId: string | null,
     public plateNumber: string,
+    public unitNumber: string | null,
     public model: string | null,
     public year: number | null,
     public capacity: number,
     public seatMap: SeatMap,
     public busClass: BusClass,
     public features: BusFeatures,
+    public mechanicalNotes: string | null,
     public isActive: boolean,
     public createdAt: Date,
-    public updatedAt: Date
+    public updatedAt: Date,
+    public odometer: number = 0,
+    public totalDistanceTraveled: number = 0,
+    public lastTripDate: Date | null = null
   ) {}
 
   static create(data: {
@@ -27,6 +32,8 @@ export class Bus {
     model?: string;
     year?: number;
     presetId?: string;
+    unitNumber?: string;
+    mechanicalNotes?: string;
   }): Bus {
     const now = new Date();
     return new Bus(
@@ -34,12 +41,14 @@ export class Bus {
       data.ownerId,
       data.presetId || null,
       data.plateNumber,
+      data.unitNumber || null,
       data.model || null,
       data.year || null,
       data.capacity,
       data.seatMap,
       data.busClass || "economico",
       data.features || {},
+      data.mechanicalNotes || null,
       true,
       now,
       now

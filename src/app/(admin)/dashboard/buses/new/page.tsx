@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { SeatMapEditor } from "@/components/bus/SeatMapEditor";
+import { createClient } from "@/lib/supabase/client";
 
 interface Seat {
   id: string;
@@ -14,12 +15,28 @@ interface Seat {
   column: number;
 }
 
+interface BusOwner {
+  id: string;
+  company_name: string;
+  user_id: string;
+  user?: {
+    id: string;
+    full_name: string | null;
+    email: string | null;
+  };
+}
+
 export default function NewBusWizardPage() {
   const router = useRouter();
   const [step, setStep] = useState(1);
   const [seats, setSeats] = useState<Seat[]>([]);
+  const [layout, setLayout] = useState<any[]>([]);
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [busOwners, setBusOwners] = useState<BusOwner[]>([]);
   const [formData, setFormData] = useState({
+    ownerId: "",
     plateNumber: "",
+    unitNumber: "",
     model: "",
     year: "",
     capacity: "",
@@ -29,7 +46,57 @@ export default function NewBusWizardPage() {
       ac: false,
       bathroom: false,
     },
+    mechanicalNotes: "",
+    odometer: "",
   });
+
+  useEffect(() => {
+    checkUserRole();
+  }, []);
+
+  useEffect(() => {
+    if (userRole === "admin") {
+      fetchBusOwners();
+    }
+  }, [userRole]);
+
+  const checkUserRole = async () => {
+    try {
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (user) {
+        const { data: userData } = await supabase
+          .from("users")
+          .select("role")
+          .eq("id", user.id)
+          .single();
+
+        setUserRole(userData?.role || null);
+      }
+    } catch (error) {
+      console.error("Error checking user role:", error);
+    }
+  };
+
+  const fetchBusOwners = async () => {
+    try {
+      const response = await fetch("/api/admin/bus-owners");
+      const data = await response.json();
+      if (response.ok) {
+        setBusOwners(data.busOwners || []);
+        console.log("Bus owners loaded:", data.busOwners?.length || 0);
+      } else {
+        console.error("Error fetching bus owners:", data.error);
+        alert(`Error al cargar propietarios: ${data.error || "Error desconocido"}`);
+      }
+    } catch (error) {
+      console.error("Error fetching bus owners:", error);
+      alert("Error al cargar la lista de propietarios. Por favor recarga la página.");
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -41,28 +108,46 @@ export default function NewBusWizardPage() {
     }
 
     try {
+      const requestBody: any = {
+        plateNumber: formData.plateNumber,
+        unitNumber: formData.unitNumber || null,
+        model: formData.model,
+        year: formData.year ? parseInt(formData.year) : null,
+        capacity: parseInt(formData.capacity),
+        busClass: formData.busClass,
+        features: formData.features,
+        mechanicalNotes: formData.mechanicalNotes || null,
+        odometer: formData.odometer ? parseFloat(formData.odometer) : 0,
+        seatMap: {
+          seats: seats.map((seat) => ({
+            id: seat.id,
+            number: seat.number,
+            x: seat.x,
+            y: seat.y,
+            type: seat.type,
+            row: seat.row,
+            column: seat.column,
+            floor: (seat as any).floor || 1,
+          })),
+          layout: {
+            width: 2400,
+            height: 1400,
+            rows: Math.max(...seats.map(s => s.row), 0) + 1,
+            columns: Math.max(...seats.map(s => s.column), 0) + 1,
+          },
+          visualLayout: layout,
+        },
+      };
+
+      // Include ownerId if user is admin
+      if (userRole === "admin" && formData.ownerId) {
+        requestBody.ownerId = formData.ownerId;
+      }
+
       const response = await fetch("/api/admin/buses", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          plateNumber: formData.plateNumber,
-          model: formData.model,
-          year: formData.year ? parseInt(formData.year) : null,
-          capacity: parseInt(formData.capacity),
-          busClass: formData.busClass,
-          features: formData.features,
-          seatMap: {
-            seats: seats.map((seat) => ({
-              id: seat.id,
-              number: seat.number,
-              x: seat.x,
-              y: seat.y,
-              type: seat.type,
-              row: seat.row,
-              column: seat.column,
-            })),
-          },
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       if (response.ok) {
@@ -110,6 +195,24 @@ export default function NewBusWizardPage() {
             {step === 1 && (
               <div className="space-y-4">
                 <h2 className="text-xl font-semibold mb-4">Información Básica</h2>
+                {userRole === "admin" && (
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Propietario del Bus *</label>
+                    <select
+                      required
+                      value={formData.ownerId}
+                      onChange={(e) => setFormData({ ...formData, ownerId: e.target.value })}
+                      className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                    >
+                      <option value="">Selecciona un propietario</option>
+                      {busOwners.map((owner) => (
+                        <option key={owner.id} value={owner.id}>
+                          {owner.company_name} {owner.user?.full_name ? `(${owner.user.full_name})` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <div>
                   <label className="block text-sm font-medium mb-2">Placa *</label>
                   <input
@@ -118,6 +221,16 @@ export default function NewBusWizardPage() {
                     value={formData.plateNumber}
                     onChange={(e) => setFormData({ ...formData, plateNumber: e.target.value })}
                     className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">Número de Unidad</label>
+                  <input
+                    type="text"
+                    value={formData.unitNumber}
+                    onChange={(e) => setFormData({ ...formData, unitNumber: e.target.value })}
+                    className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                    placeholder="Ej: UN-001"
                   />
                 </div>
                 <div>
@@ -148,6 +261,30 @@ export default function NewBusWizardPage() {
                     className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
                   />
                 </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">Odómetro Actual (km)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={formData.odometer}
+                    onChange={(e) => setFormData({ ...formData, odometer: e.target.value })}
+                    className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                    placeholder="0.00"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Kilometraje actual del bus al momento de registro
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">Anotaciones Mecánicas</label>
+                  <textarea
+                    value={formData.mechanicalNotes}
+                    onChange={(e) => setFormData({ ...formData, mechanicalNotes: e.target.value })}
+                    className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary min-h-[100px]"
+                    placeholder="Notas sobre mantenimiento, reparaciones, etc."
+                  />
+                </div>
               </div>
             )}
 
@@ -163,6 +300,8 @@ export default function NewBusWizardPage() {
                   <SeatMapEditor
                     initialSeats={seats}
                     onSeatsChange={setSeats}
+                    initialLayout={layout}
+                    onLayoutChange={setLayout}
                   />
                 </div>
                 {seats.length === 0 && (
@@ -224,6 +363,10 @@ export default function NewBusWizardPage() {
                       <p className="font-semibold">{formData.plateNumber}</p>
                     </div>
                     <div>
+                      <p className="text-sm text-muted-foreground mb-1">Número de Unidad</p>
+                      <p className="font-semibold">{formData.unitNumber || "N/A"}</p>
+                    </div>
+                    <div>
                       <p className="text-sm text-muted-foreground mb-1">Modelo</p>
                       <p className="font-semibold">{formData.model || "N/A"}</p>
                     </div>
@@ -262,6 +405,12 @@ export default function NewBusWizardPage() {
                       )}
                     </div>
                   </div>
+                  {formData.mechanicalNotes && (
+                    <div>
+                      <p className="text-sm text-muted-foreground mb-2">Anotaciones Mecánicas</p>
+                      <p className="text-sm bg-muted p-3 rounded-lg">{formData.mechanicalNotes}</p>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

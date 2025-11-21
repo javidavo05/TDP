@@ -20,6 +20,8 @@ export class RouteService {
     basePrice: number;
     distanceKm?: number;
     estimatedDurationMinutes?: number;
+    isExpress?: boolean;
+    expressPriceMultiplier?: number;
   }): Promise<Route> {
     const route = Route.create(data);
     return this.routeRepository.create(route);
@@ -33,6 +35,8 @@ export class RouteService {
     distanceKm?: number;
     estimatedDurationMinutes?: number;
     isActive?: boolean;
+    isExpress?: boolean;
+    expressPriceMultiplier?: number;
   }): Promise<Route> {
     const route = await this.routeRepository.findById(id);
     if (!route) {
@@ -46,6 +50,8 @@ export class RouteService {
     if (data.distanceKm !== undefined) route.distanceKm = data.distanceKm || null;
     if (data.estimatedDurationMinutes !== undefined) route.estimatedDurationMinutes = data.estimatedDurationMinutes || null;
     if (data.isActive !== undefined) route.isActive = data.isActive;
+    if (data.isExpress !== undefined) route.isExpress = data.isExpress;
+    if (data.expressPriceMultiplier !== undefined) route.expressPriceMultiplier = data.expressPriceMultiplier;
 
     return this.routeRepository.update(route);
   }
@@ -62,13 +68,13 @@ export class RouteService {
     name: string;
     kmPosition: number;
     orderIndex: number;
-    priceAdjustment?: number;
+    price?: number; // Complete ticket price for this stop
   }): Promise<RouteStop> {
     return this.routeRepository.addStop(routeId, {
       name: data.name,
       kmPosition: data.kmPosition,
       orderIndex: data.orderIndex,
-      priceAdjustment: data.priceAdjustment || 0,
+      price: data.price || 0,
     });
   }
 
@@ -76,7 +82,7 @@ export class RouteService {
     name?: string;
     kmPosition?: number;
     orderIndex?: number;
-    priceAdjustment?: number;
+    price?: number; // Complete ticket price for this stop
   }): Promise<RouteStop> {
     return this.routeRepository.updateStop(stopId, data);
   }

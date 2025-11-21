@@ -10,7 +10,7 @@ interface TripCardProps {
     origin: string;
     destination: string;
     departureTime: string;
-    arrivalTime: string;
+    arrivalTime: string | null;
     price: number;
     availableSeats: number;
     totalSeats: number;
@@ -96,7 +96,9 @@ export function TripCard({ trip }: TripCardProps) {
           </div>
           <div className="flex-1 text-right">
             <div className="text-sm text-muted-foreground mb-1">Llegada</div>
-            <div className="text-lg font-semibold">{formatTime(trip.arrivalTime)}</div>
+            <div className="text-lg font-semibold">
+              {trip.arrivalTime ? formatTime(trip.arrivalTime) : "N/A"}
+            </div>
             <div className="text-xs text-muted-foreground">{trip.destination}</div>
           </div>
         </div>

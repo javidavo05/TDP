@@ -1,11 +1,9 @@
 "use client";
 
-import { ThemeToggle } from "@/components/public/ThemeToggle";
-import { LoginModal } from "@/components/public/LoginModal";
+import { UniversalThemeToggle } from "@/components/ui/UniversalThemeToggle";
 import { UserAvatar } from "@/components/profile/UserAvatar";
 import { useAuth } from "@/hooks/useAuth";
 import Link from "next/link";
-import { useState } from "react";
 
 export default function PublicLayout({
   children,
@@ -13,7 +11,6 @@ export default function PublicLayout({
   children: React.ReactNode;
 }) {
   const { user, isAuthenticated, loading } = useAuth();
-  const [loginModalOpen, setLoginModalOpen] = useState(false);
   
   return (
     <div className="min-h-screen bg-background">
@@ -63,21 +60,8 @@ export default function PublicLayout({
 
             {/* Actions */}
             <div className="flex items-center gap-4">
-              <ThemeToggle />
-              {!loading && (
-                <>
-                  {isAuthenticated ? (
-                    <UserAvatar />
-                  ) : (
-                    <button
-                      onClick={() => setLoginModalOpen(true)}
-                      className="hidden md:inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-dark transition-colors"
-                    >
-                      Iniciar Sesión
-                    </button>
-                  )}
-                </>
-              )}
+              <UniversalThemeToggle />
+              {!loading && isAuthenticated && <UserAvatar />}
             </div>
           </div>
         </div>
@@ -85,9 +69,6 @@ export default function PublicLayout({
 
       {/* Main Content */}
       <main className="flex-1">{children}</main>
-
-      {/* Login Modal */}
-      <LoginModal isOpen={loginModalOpen} onClose={() => setLoginModalOpen(false)} />
 
       {/* Footer */}
       <footer className="border-t border-border bg-card mt-20">

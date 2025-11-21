@@ -61,19 +61,48 @@ export async function POST(request: NextRequest) {
     if (authError || !authData.user) {
       return NextResponse.json(
         { error: authError?.message || "Credenciales inválidas" },
-        { status: 401 }
+        { 
+          status: 401,
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
       );
     }
 
     // Get or create user in database
     let user = await userRepository.findByEmail(email);
     if (!user) {
-      // Create user if doesn't exist
+      // Create user if doesn't exist, using the auth user's ID
       user = User.create({
-        email,
-        role: "passenger",
+        id: authData.user.id, // Use the auth user's ID
+        email: authData.user.email || email,
+        role: (authData.user.user_metadata?.role as any) || "passenger",
       });
-      user = await userRepository.create(user);
+      try {
+        user = await userRepository.create(user);
+      } catch (error) {
+        // If creation fails, try to fetch again (might have been created by trigger)
+        user = await userRepository.findByEmail(email);
+        if (!user) {
+          throw error;
+        }
+      }
+    }
+
+    // If user is pos_agent, get their assigned terminal
+    let terminalId = null;
+    if (user.role === "pos_agent") {
+      const { data: terminal } = await supabase
+        .from("pos_terminals")
+        .select("id")
+        .eq("assigned_user_id", user.id)
+        .eq("is_active", true)
+        .single();
+      
+      if (terminal) {
+        terminalId = terminal.id;
+      }
     }
 
     // Return response with cookies set
@@ -85,6 +114,7 @@ export async function POST(request: NextRequest) {
           role: user.role,
           fullName: user.fullName,
         },
+        terminalId, // Include terminal ID for pos_agent users
         message: "Signed in successfully",
       },
       {
@@ -96,7 +126,12 @@ export async function POST(request: NextRequest) {
     console.error("Error signing in:", error);
     return NextResponse.json(
       { error: (error as Error).message || "Failed to sign in" },
-      { status: 401 }
+      { 
+        status: 401,
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }
     );
   }
 }

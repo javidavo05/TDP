@@ -12,6 +12,9 @@ export class Payment {
     public providerTransactionId: string | null,
     public providerResponse: Record<string, unknown> | null,
     public processedAt: Date | null,
+    public posSessionId: string | null,
+    public receivedAmount: number | null,
+    public changeAmount: number,
     public createdAt: Date,
     public updatedAt: Date
   ) {}
@@ -36,6 +39,9 @@ export class Payment {
       null,
       null,
       null,
+      null,
+      null,
+      0,
       now,
       now
     );

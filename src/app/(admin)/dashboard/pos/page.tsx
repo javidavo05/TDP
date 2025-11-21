@@ -1,32 +1,52 @@
 "use client";
 
-import { useState, useEffect, Fragment } from "react";
+import { useState, useEffect } from "react";
 import { TouchSeatSelector } from "@/components/pos/TouchSeatSelector";
 import { TouchButton } from "@/components/pos/TouchButton";
+import { PaymentAmountInput } from "@/components/pos/PaymentAmountInput";
+import { UniversalThemeToggle } from "@/components/ui/UniversalThemeToggle";
+import { WeeklyScheduleCalendar } from "@/components/pos/WeeklyScheduleCalendar";
+import { SeatSelectionModal } from "@/components/pos/SeatSelectionModal";
+import { useTripSync } from "@/hooks/useTripSync";
 import { format } from "date-fns";
 import Link from "next/link";
+import { createClient } from "@/lib/supabase/client";
 
-type Step = "trip" | "seat" | "passenger" | "confirm";
-type StepStatus = "current" | "completed" | "upcoming";
+interface RouteStop {
+  id: string;
+  name: string;
+  price: number;
+  orderIndex: number;
+}
 
-const STEP_SEQUENCE: Step[] = ["trip", "seat", "passenger", "confirm"];
-const STEP_META: Array<{ id: Step; label: string; number: string }> = [
-  { id: "trip", label: "Viaje", number: "1" },
-  { id: "seat", label: "Asiento", number: "2" },
-  { id: "passenger", label: "Pasajero", number: "3" },
-];
+interface Schedule {
+  id: string;
+  hour: number;
+  hourFormatted: string;
+  routeId: string;
+  routeName: string;
+  origin: string;
+  destination: string;
+  isExpress: boolean;
+  price: number;
+  basePrice: number;
+  minPrice?: number;
+  maxPrice?: number;
+  stops?: RouteStop[];
+  assignedBuses: Array<{
+    id: string;
+    plateNumber: string;
+    unitNumber: string | null;
+    capacity: number;
+  }>;
+  availableSeats: number;
+  totalSeats: number;
+  hasTrips: boolean;
+  tripIds: string[];
+  hasAssignedBuses?: boolean;
+  date?: string;
+}
 
-const STATUS_TEXT_CLASS: Record<StepStatus, string> = {
-  current: "text-primary",
-  completed: "text-success",
-  upcoming: "text-muted-foreground",
-};
-
-const STATUS_CIRCLE_CLASS: Record<StepStatus, string> = {
-  current: "bg-primary text-primary-foreground",
-  completed: "bg-success text-success-foreground",
-  upcoming: "bg-muted text-muted-foreground",
-};
 
 interface Trip {
   id: string;
@@ -38,6 +58,7 @@ interface Trip {
     destination: string;
   };
   bus: {
+    id?: string;
     seatMap: {
       seats: Array<{
         id: string;
@@ -65,8 +86,15 @@ interface Seat {
   isAvailable: boolean;
 }
 
-export default function POSPage() {
-  const [trips, setTrips] = useState<Trip[]>([]);
+interface POSPageProps {
+  terminalId?: string;
+  sessionId?: string;
+}
+
+export default function POSPage(props: POSPageProps = {}) {
+  const { terminalId, sessionId } = props;
+  const [schedules, setSchedules] = useState<Schedule[]>([]);
+  const [selectedSchedule, setSelectedSchedule] = useState<Schedule | null>(null);
   const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
   const [selectedSeat, setSelectedSeat] = useState<string | null>(null);
   const [displaySessionId, setDisplaySessionId] = useState<string | null>(null);
@@ -74,23 +102,214 @@ export default function POSPage() {
   const [passengerPhone, setPassengerPhone] = useState("");
   const [passengerDocumentId, setPassengerDocumentId] = useState("");
   const [passengerDocumentType, setPassengerDocumentType] = useState<"cedula" | "pasaporte">("cedula");
+  const [paymentMethod, setPaymentMethod] = useState<"cash" | "card">("cash");
+  const [receivedAmount, setReceivedAmount] = useState<number | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [step, setStep] = useState<Step>("trip");
+  const [loadingSchedules, setLoadingSchedules] = useState(true);
+  const [loadingTrip, setLoadingTrip] = useState(false);
+  const [showSeatSelection, setShowSeatSelection] = useState(false);
+  const [secondaryDisplayWindow, setSecondaryDisplayWindow] = useState<Window | null>(null);
+  
+  // Week selection - minimum 7 days from today
+  const getMinWeekStart = () => {
+    const minDate = new Date();
+    minDate.setDate(minDate.getDate() + 7);
+    // Get Sunday of that week
+    const day = minDate.getDay();
+    const diff = minDate.getDate() - day;
+    const sunday = new Date(minDate.setDate(diff));
+    return format(sunday, "yyyy-MM-dd");
+  };
+  
+  const [weekStart, setWeekStart] = useState<string>(getMinWeekStart());
 
   useEffect(() => {
-    fetchUpcomingTrips();
-  }, []);
+    // Fetch schedules for all days in the week
+    fetchSchedulesForWeek();
+  }, [weekStart]);
 
-  const fetchUpcomingTrips = async () => {
+  // Subscribe to realtime changes using the sync hook
+  useTripSync({
+    onTripCreated: () => {
+      console.log('Trip created - refreshing schedules');
+      fetchSchedulesForWeek();
+    },
+    onTripUpdated: () => {
+      console.log('Trip updated - refreshing schedules');
+      fetchSchedulesForWeek();
+      // If current trip was updated, refresh it
+      if (selectedTrip) {
+        fetchTripDetails(selectedTrip.id);
+      }
+    },
+    onTripDeleted: () => {
+      console.log('Trip deleted - refreshing schedules');
+      fetchSchedulesForWeek();
+    },
+    onTicketCreated: () => {
+      console.log('Ticket created - refreshing availability');
+      // Refresh current trip if selected
+      if (selectedTrip) {
+        fetchTripDetails(selectedTrip.id);
+      }
+    },
+    onTicketUpdated: () => {
+      console.log('Ticket updated - refreshing availability');
+      if (selectedTrip) {
+        fetchTripDetails(selectedTrip.id);
+      }
+    },
+    enabled: true,
+  });
+
+  useEffect(() => {
+    if (selectedSchedule) {
+      if (selectedSchedule.tripIds.length > 0) {
+        // Trip already exists, fetch it
+        fetchTripDetails(selectedSchedule.tripIds[0]);
+      } else if (selectedSchedule.hasAssignedBuses) {
+        // No trip exists but has bus assigned - fetch bus details to show seat map
+        fetchBusForSchedule(selectedSchedule);
+      } else {
+        setSelectedTrip(null);
+        setSelectedSeat(null);
+      }
+      // Update secondary display when schedule changes
+      updateSecondaryDisplay(selectedSchedule);
+    } else {
+      setSelectedTrip(null);
+      setSelectedSeat(null);
+      updateSecondaryDisplay(null);
+    }
+  }, [selectedSchedule]);
+
+  // Update secondary display when trip is loaded and open seat selection modal
+  useEffect(() => {
+    if (selectedTrip && selectedSchedule) {
+      // Automatically open seat selection modal for the operator
+      setShowSeatSelection(true);
+    }
+  }, [selectedTrip]);
+
+  // Update secondary display when seat selection modal opens/closes or seat is selected
+  useEffect(() => {
+    if (showSeatSelection && selectedTrip && selectedSchedule) {
+      // Show seat selection on secondary display when modal is open
+      const state = {
+        mode: "seat-selection" as const,
+        tripId: selectedTrip.id,
+        busId: selectedTrip.bus?.id || "",
+        availableSeats: selectedTrip.availableSeats || 0,
+        totalSeats: selectedTrip.totalSeats || 0,
+        selectedSeatId: selectedSeat || null, // Include selected seat ID
+      };
+      localStorage.setItem("pos-secondary-display", JSON.stringify(state));
+      const channel = new BroadcastChannel("pos-secondary-display");
+      channel.postMessage(state);
+      channel.close();
+    } else {
+      // Show advertising when modal is closed
+      const state = { mode: "advertising" as const };
+      localStorage.setItem("pos-secondary-display", JSON.stringify(state));
+      const channel = new BroadcastChannel("pos-secondary-display");
+      channel.postMessage(state);
+      channel.close();
+    }
+  }, [showSeatSelection, selectedTrip, selectedSchedule, selectedSeat]);
+
+  const fetchBusForSchedule = async (schedule: Schedule) => {
+    setLoadingTrip(true);
     try {
-      const response = await fetch("/api/public/trips/upcoming");
+      // Fetch bus details from the first assigned bus
+      const firstBus = schedule.assignedBuses[0];
+      if (!firstBus) return;
+      
+      const response = await fetch(`/api/admin/buses/${firstBus.id}`);
       const data = await response.json();
-      if (response.ok) {
-        setTrips(data.trips || []);
+      
+      if (response.ok && data.bus) {
+        const bus = data.bus;
+        const scheduleDate = schedule.date || format(new Date(), "yyyy-MM-dd");
+        // Create a placeholder trip object with bus seat map
+        setSelectedTrip({
+          id: `pending-${schedule.id}`, // Temporary ID
+          departureTime: `${scheduleDate}T${schedule.hour.toString().padStart(2, "0")}:00:00`,
+          arrivalTime: `${scheduleDate}T${schedule.hour.toString().padStart(2, "0")}:00:00`,
+          price: schedule.price,
+          route: {
+            origin: schedule.origin,
+            destination: schedule.destination,
+          },
+          bus: {
+            id: firstBus.id,
+            seatMap: bus.seatMap || { seats: [] },
+          },
+          availableSeats: schedule.availableSeats || bus.capacity || 0,
+          totalSeats: schedule.totalSeats || bus.capacity || 0,
+        } as Trip);
       }
     } catch (error) {
-      console.error("Error fetching trips:", error);
+      console.error("Error fetching bus details:", error);
+    } finally {
+      setLoadingTrip(false);
+    }
+  };
+
+  const fetchSchedulesForWeek = async () => {
+    setLoadingSchedules(true);
+    try {
+      // Fetch schedules for all 7 days of the week
+      const weekStartDate = new Date(weekStart);
+      const allSchedules: Schedule[] = [];
+
+      console.log(`[POS Page] Fetching schedules for week starting ${weekStart}`);
+
+      for (let i = 0; i < 7; i++) {
+        const date = new Date(weekStartDate);
+        date.setDate(date.getDate() + i);
+        const dateStr = format(date, "yyyy-MM-dd");
+
+        try {
+          console.log(`[POS Page] Fetching schedules for date ${dateStr}`);
+          const response = await fetch(`/api/pos/schedules?date=${dateStr}`);
+          const data = await response.json();
+          if (response.ok && data.schedules) {
+            console.log(`[POS Page] Received ${data.schedules.length} schedules for ${dateStr}`);
+            // Ensure each schedule has the date
+            const schedulesWithDate = data.schedules.map((s: Schedule) => ({
+              ...s,
+              date: dateStr,
+            }));
+            allSchedules.push(...schedulesWithDate);
+          } else {
+            console.error(`[POS Page] Error response for ${dateStr}:`, data);
+          }
+        } catch (error) {
+          console.error(`[POS Page] Error fetching schedules for ${dateStr}:`, error);
+        }
+      }
+
+      console.log(`[POS Page] Total schedules fetched: ${allSchedules.length}`);
+      setSchedules(allSchedules);
+    } catch (error) {
+      console.error("[POS Page] Error fetching schedules:", error);
+    } finally {
+      setLoadingSchedules(false);
+    }
+  };
+
+  const fetchTripDetails = async (tripId: string) => {
+    setLoadingTrip(true);
+    try {
+      const response = await fetch(`/api/public/trips/${tripId}`);
+      const data = await response.json();
+      if (response.ok) {
+        setSelectedTrip(data.trip);
+      }
+    } catch (error) {
+      console.error("Error fetching trip details:", error);
+    } finally {
+      setLoadingTrip(false);
     }
   };
 
@@ -118,27 +337,83 @@ export default function POSPage() {
   };
 
   const processSale = async () => {
-    if (!selectedTrip || !selectedSeat || !passengerName || !passengerDocumentId) {
+    if (!selectedTrip || !selectedSeat || !passengerName || !passengerDocumentId || !selectedSchedule) {
       alert("Por favor completa todos los campos requeridos (nombre y documento)");
+      return;
+    }
+
+    if (!sessionId) {
+      alert("No hay sesión de caja activa. Por favor abre la caja primero.");
+      return;
+    }
+
+    if (paymentMethod === "cash" && (!receivedAmount || receivedAmount < selectedTrip.price * 1.07)) {
+      alert("El monto recibido debe ser mayor o igual al precio del boleto (con ITBMS)");
       return;
     }
 
     setIsProcessing(true);
     try {
+      let tripId = selectedTrip.id;
+      
+      // If trip doesn't exist yet (pending trip), create it first
+      if (tripId.startsWith("pending-") && selectedSchedule?.date) {
+        try {
+          const createTripResponse = await fetch("/api/admin/schedules/generate-trips", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ date: selectedSchedule.date }),
+          });
+          
+          if (createTripResponse.ok) {
+            const tripData = await createTripResponse.json();
+            // Find the trip for this schedule
+            const createdTrips = tripData.trips || [];
+            const matchingTrip = createdTrips.find((t: any) => {
+              const depTime = new Date(t.departureTime);
+              return depTime.getHours() === selectedSchedule.hour && 
+                     t.routeId === selectedSchedule.routeId;
+            });
+            
+            if (matchingTrip) {
+              tripId = matchingTrip.id;
+              // Fetch full trip details
+              const tripDetailsResponse = await fetch(`/api/public/trips/${tripId}`);
+              if (tripDetailsResponse.ok) {
+                const tripDetails = await tripDetailsResponse.json();
+                setSelectedTrip(tripDetails.trip);
+              }
+            } else {
+              throw new Error("No se pudo crear el viaje para este horario");
+            }
+          } else {
+            throw new Error("Error al crear el viaje");
+          }
+        } catch (error) {
+          console.error("Error creating trip:", error);
+          alert("Error al crear el viaje. Por favor intenta nuevamente.");
+          setIsProcessing(false);
+          return;
+        }
+      }
+      
+      const totalAmount = selectedTrip.price;
       const response = await fetch("/api/pos/tickets", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          tripId: selectedTrip.id,
+          tripId: tripId,
           seatId: selectedSeat,
           passengerName,
           passengerPhone,
           passengerDocumentId,
           passengerDocumentType,
-          destinationStopId: selectedTrip.route.destination,
-          paymentMethod: "cash",
-          amount: selectedTrip.price,
-          terminalId: "pos-1", // TODO: Get from auth
+          destinationStopId: null, // TODO: Get from route stops
+          paymentMethod,
+          amount: totalAmount,
+          terminalId: terminalId || "pos-1",
+          sessionId,
+          receivedAmount: paymentMethod === "cash" ? receivedAmount : undefined,
         }),
       });
 
@@ -165,7 +440,6 @@ export default function POSPage() {
           }
         } catch (printError) {
           console.error("Error printing ticket:", printError);
-          // Continue even if printing fails
         }
 
         // Print fiscal invoice (if Electron is available)
@@ -190,20 +464,23 @@ export default function POSPage() {
           }
         } catch (fiscalError) {
           console.error("Error printing fiscal invoice:", fiscalError);
-          // Continue even if fiscal printing fails
         }
 
         alert("✓ Venta procesada exitosamente");
         // Reset form
+        setSelectedSchedule(null);
         setSelectedTrip(null);
         setSelectedSeat(null);
+        setShowSeatSelection(false); // Close seat selection modal
         setPassengerName("");
         setPassengerPhone("");
         setPassengerDocumentId("");
         setPassengerDocumentType("cedula");
+        setPaymentMethod("cash");
+        setReceivedAmount(null);
         setDisplaySessionId(null);
-        setStep("trip");
-        fetchUpcomingTrips();
+        updateSecondaryDisplay(null); // Reset to advertising
+        fetchSchedulesForWeek();
       } else {
         const error = await response.json();
         alert(`Error: ${error.error || "Error al procesar la venta"}`);
@@ -235,31 +512,72 @@ export default function POSPage() {
     }));
   };
 
-  const filteredTrips = trips.filter((trip) => {
-    if (!searchQuery) return true;
-    const query = searchQuery.toLowerCase();
-    return (
-      trip.route.origin.toLowerCase().includes(query) ||
-      trip.route.destination.toLowerCase().includes(query)
-    );
-  });
-
-  const handleTripSelect = (trip: Trip) => {
-    setSelectedTrip(trip);
-    setSelectedSeat(null);
-    setStep("seat");
+  const handleScheduleSelect = (schedule: Schedule) => {
+    setSelectedSchedule(schedule);
+    // Open or update secondary display window
+    updateSecondaryDisplay(schedule);
   };
+
+  const updateSecondaryDisplay = (schedule?: Schedule | null) => {
+    // Open secondary display window if not already open
+    if (!secondaryDisplayWindow || secondaryDisplayWindow.closed) {
+      const newWindow = window.open(
+        "/dashboard/pos/secondary-display",
+        "pos-secondary-display",
+        "width=1920,height=1080,left=1920,top=0"
+      );
+      if (newWindow) {
+        setSecondaryDisplayWindow(newWindow);
+        // Wait for window to load before sending message
+        newWindow.addEventListener("load", () => {
+          sendSecondaryDisplayUpdate(schedule);
+        });
+      }
+    } else {
+      sendSecondaryDisplayUpdate(schedule);
+    }
+  };
+
+  const sendSecondaryDisplayUpdate = (schedule?: Schedule | null) => {
+    // Always show advertising on secondary display
+    // Seat selection is handled in the main POS screen for the operator
+    const state = { mode: "advertising" as const };
+    localStorage.setItem("pos-secondary-display", JSON.stringify(state));
+    const channel = new BroadcastChannel("pos-secondary-display");
+    channel.postMessage(state);
+    channel.close();
+  };
+
 
   const handleSeatSelect = (seatId: string) => {
     setSelectedSeat(seatId);
-    setStep("passenger");
+  };
+
+  const clearSelection = () => {
+    setSelectedSchedule(null);
+    setSelectedTrip(null);
+    setSelectedSeat(null);
+    setShowSeatSelection(false);
+    updateSecondaryDisplay(null);
+  };
+
+  const handleOpenSeatSelection = () => {
+    if (selectedTrip && selectedSchedule) {
+      setShowSeatSelection(true);
+    }
+  };
+
+  const handleSeatSelectFromModal = (seatId: string) => {
+    setSelectedSeat(seatId);
+    // Don't close modal immediately - let user confirm
+    // Modal will close when user clicks confirm button
   };
 
   return (
     <div className="min-h-screen bg-background p-4 md:p-6">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="mb-6 flex items-center justify-between">
+        <div className="mb-6 flex items-center justify-between flex-wrap gap-4">
           <div>
             <Link
               href="/dashboard"
@@ -272,107 +590,57 @@ export default function POSPage() {
           </div>
         </div>
 
-        {/* Step Indicator */}
-        <div className="mb-6 flex items-center justify-center gap-4">
-          {STEP_META.map((meta, index) => {
-            const currentIndex = STEP_SEQUENCE.indexOf(step);
-            const targetIndex = STEP_SEQUENCE.indexOf(meta.id);
-            const status: StepStatus =
-              currentIndex === targetIndex
-                ? "current"
-                : currentIndex > targetIndex
-                ? "completed"
-                : "upcoming";
-
-            return (
-              <Fragment key={meta.id}>
-                <div className={`flex items-center gap-2 ${STATUS_TEXT_CLASS[status]}`}>
-                  <div
-                    className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg ${STATUS_CIRCLE_CLASS[status]}`}
-                  >
-                    {status === "completed" ? "✓" : meta.number}
-                  </div>
-                  <span className="font-semibold text-lg">{meta.label}</span>
-                </div>
-                {index < STEP_META.length - 1 && <div className="w-16 h-1 bg-border" />}
-              </Fragment>
-            );
-          })}
-        </div>
-
-        {/* Main Content */}
+        {/* Main Content - Single Page Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left Column - Trip Selection and Seat Map */}
+          {/* Left Column - Selection Grids */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Trip Selection */}
-            {(step === "trip" || !selectedTrip) && (
-              <div className="bg-card border-2 border-border rounded-2xl p-6 md:p-8 shadow-lg">
-                <h2 className="text-2xl font-bold mb-6">Seleccionar Viaje</h2>
-                <input
-                  type="text"
-                  placeholder="Buscar por origen o destino..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full px-6 py-4 bg-background border-2 border-input rounded-xl mb-6 text-lg focus:outline-none focus:ring-2 focus:ring-primary min-h-[64px]"
-                />
-                <div className="space-y-3 max-h-[500px] overflow-y-auto">
-                  {filteredTrips.map((trip) => (
-                    <TouchButton
-                      key={trip.id}
-                      onClick={() => handleTripSelect(trip)}
-                      variant={selectedTrip?.id === trip.id ? "primary" : "secondary"}
-                      size="lg"
-                      className="w-full text-left justify-start"
-                    >
-                      <div className="flex items-center justify-between w-full">
-                        <div>
-                          <div className="font-bold text-xl mb-1">
-                            {trip.route.origin} → {trip.route.destination}
-                          </div>
-                          <div className="text-base text-muted-foreground">
-                            {format(new Date(trip.departureTime), "HH:mm")} - {format(new Date(trip.arrivalTime), "HH:mm")}
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <div className="font-bold text-2xl">${trip.price.toFixed(2)}</div>
-                          <div className="text-sm text-muted-foreground">
-                            {trip.availableSeats} disponibles
-                          </div>
-                        </div>
-                      </div>
-                    </TouchButton>
-                  ))}
-                </div>
-              </div>
-            )}
+            {/* Weekly Schedule Calendar */}
+            <div className="bg-card border-2 border-border rounded-2xl p-6 shadow-lg">
+              <h2 className="text-2xl font-bold mb-4">Calendario de Horarios</h2>
+              <WeeklyScheduleCalendar
+                schedules={schedules}
+                selectedScheduleId={selectedSchedule?.id || null}
+                onSelectSchedule={handleScheduleSelect}
+                loading={loadingSchedules}
+                initialDate={weekStart}
+              />
+            </div>
 
-            {/* Seat Map */}
-            {selectedTrip && (step === "seat" || step === "passenger" || step === "confirm") && (
-              <div className="bg-card border-2 border-border rounded-2xl p-6 md:p-8 shadow-lg">
-                <div className="flex items-center justify-between mb-6">
+            {/* Schedule Details and Seat Selection Button */}
+            {selectedSchedule && (selectedSchedule.hasTrips || selectedSchedule.hasAssignedBuses) && (
+              <div className="bg-card border-2 border-border rounded-2xl p-6 shadow-lg">
+                <div className="flex items-center justify-between mb-4">
                   <div>
-                    <h2 className="text-2xl font-bold mb-2">Mapa de Asientos</h2>
-                    <p className="text-lg text-muted-foreground">
-                      {selectedTrip.route.origin} → {selectedTrip.route.destination}
+                    <h3 className="text-xl font-bold">
+                      {selectedSchedule.routeName}
+                    </h3>
+                    <p className="text-muted-foreground">
+                      {selectedSchedule.origin} → {selectedSchedule.destination}
+                    </p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {selectedSchedule.hourFormatted} - {selectedSchedule.isExpress ? "Expreso" : "Normal"}
                     </p>
                   </div>
-                  {selectedSeat && (
-                    <TouchButton
-                      onClick={createDisplaySession}
-                      variant="secondary"
-                      size="md"
-                    >
-                      Pantalla Cliente
-                    </TouchButton>
-                  )}
+                  <div className="text-right">
+                    <p className="text-sm text-muted-foreground">Cupo Disponible</p>
+                    <p className="text-2xl font-bold text-primary">
+                      {selectedSchedule.availableSeats} / {selectedSchedule.totalSeats}
+                    </p>
+                  </div>
                 </div>
-                <TouchSeatSelector
-                  seats={getSeats()}
-                  selectedSeatId={selectedSeat}
-                  onSeatSelect={handleSeatSelect}
-                />
+                {selectedTrip && (
+                  <TouchButton
+                    onClick={handleOpenSeatSelection}
+                    variant="primary"
+                    size="lg"
+                    className="w-full"
+                  >
+                    Seleccionar Asiento
+                  </TouchButton>
+                )}
               </div>
             )}
+
           </div>
 
           {/* Right Column - Passenger Info and Sale */}
@@ -392,7 +660,9 @@ export default function POSPage() {
                   {selectedSeat && (
                     <div>
                       <p className="text-sm text-muted-foreground mb-1">Asiento</p>
-                      <p className="font-bold text-3xl text-primary">{selectedSeat}</p>
+                      <p className="font-bold text-3xl text-primary">
+                        {getSeats().find((s) => s.id === selectedSeat)?.number || selectedSeat}
+                      </p>
                     </div>
                   )}
 
@@ -405,7 +675,7 @@ export default function POSPage() {
                 </div>
               )}
 
-              {selectedSeat && (step === "passenger" || step === "confirm") && (
+              {selectedSeat && selectedTrip && (
                 <div className="space-y-6 border-t-2 border-border pt-6">
                   <div>
                     <label className="block text-lg font-semibold mb-3">
@@ -461,34 +731,75 @@ export default function POSPage() {
                     />
                   </div>
 
-                  <div className="flex gap-4">
-                    <TouchButton
-                      onClick={() => {
-                        setStep("seat");
-                        setSelectedSeat(null);
-                      }}
-                      variant="secondary"
-                      size="lg"
-                      className="flex-1"
-                    >
-                      Atrás
-                    </TouchButton>
-                    <TouchButton
-                      onClick={processSale}
-                      disabled={isProcessing || !passengerName || !passengerDocumentId}
-                      variant="success"
-                      size="lg"
-                      className="flex-1"
-                    >
-                      {isProcessing ? "Procesando..." : "Procesar Venta"}
-                    </TouchButton>
+                  {/* Payment Method Selection */}
+                  <div>
+                    <label className="block text-lg font-semibold mb-3">
+                      Método de Pago *
+                    </label>
+                    <div className="flex gap-4">
+                      <TouchButton
+                        onClick={() => {
+                          setPaymentMethod("cash");
+                          setReceivedAmount(null);
+                        }}
+                        variant={paymentMethod === "cash" ? "primary" : "secondary"}
+                        size="lg"
+                        className="flex-1"
+                      >
+                        Efectivo
+                      </TouchButton>
+                      <TouchButton
+                        onClick={() => {
+                          setPaymentMethod("card");
+                          setReceivedAmount(null);
+                        }}
+                        variant={paymentMethod === "card" ? "primary" : "secondary"}
+                        size="lg"
+                        className="flex-1"
+                      >
+                        Tarjeta
+                      </TouchButton>
+                    </div>
                   </div>
+
+                  {/* Payment Amount Input */}
+                  {selectedTrip && (
+                    <PaymentAmountInput
+                      totalAmount={selectedTrip.price * 1.07} // Price + 7% ITBMS
+                      onAmountReceived={(amount, change) => {
+                        setReceivedAmount(amount);
+                      }}
+                      paymentMethod={paymentMethod}
+                      disabled={isProcessing}
+                    />
+                  )}
+
+                  <TouchButton
+                    onClick={processSale}
+                    disabled={
+                      isProcessing ||
+                      !passengerName ||
+                      !passengerDocumentId ||
+                      (paymentMethod === "cash" && (!receivedAmount || receivedAmount < (selectedTrip.price * 1.07)))
+                    }
+                    variant="success"
+                    size="lg"
+                    className="w-full"
+                  >
+                    {isProcessing ? "Procesando..." : "Procesar Venta"}
+                  </TouchButton>
                 </div>
               )}
 
               {!selectedSeat && selectedTrip && (
                 <div className="text-center py-8 text-muted-foreground text-lg">
                   Selecciona un asiento para continuar
+                </div>
+              )}
+
+              {!selectedTrip && (
+                <div className="text-center py-8 text-muted-foreground text-lg">
+                  Selecciona un horario o ruta para comenzar
                 </div>
               )}
 
@@ -502,6 +813,21 @@ export default function POSPage() {
           </div>
         </div>
       </div>
+
+      {/* Seat Selection Modal */}
+      {showSeatSelection && selectedTrip && selectedSchedule && (
+        <SeatSelectionModal
+          tripId={selectedTrip.id}
+          busId={selectedTrip.bus?.id || ""}
+          availableSeats={selectedTrip.availableSeats || 0}
+          totalSeats={selectedTrip.totalSeats || 0}
+          onSelect={handleSeatSelectFromModal}
+          onClose={() => {
+            setShowSeatSelection(false);
+          }}
+        />
+      )}
+
     </div>
   );
 }

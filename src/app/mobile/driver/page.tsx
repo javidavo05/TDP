@@ -2,14 +2,23 @@
 
 import { useEffect, useState } from "react";
 import { format } from "date-fns";
+import { UniversalThemeToggle } from "@/components/ui/UniversalThemeToggle";
 
 interface Passenger {
-  id: string;
-  name: string;
-  seat: string;
-  boardingStop: string;
-  destinationStop: string;
-  status: "pending" | "boarded" | "no_show";
+  ticketId: string;
+  passengerName: string;
+  seatId: string;
+  boardingStopId: string | null;
+  status: string;
+}
+
+interface Stop {
+  stopId: string;
+  stopName: string;
+  kmPosition: number;
+  orderIndex: number;
+  passengerCount: number;
+  passengers: Passenger[];
 }
 
 interface GPSPosition {
@@ -24,8 +33,8 @@ export default function DriverMobilePage() {
   const [tracking, setTracking] = useState(false);
   const [currentTrip, setCurrentTrip] = useState<any>(null);
   const [position, setPosition] = useState<GPSPosition | null>(null);
-  const [manifest, setManifest] = useState<Passenger[]>([]);
-  const [currentStop, setCurrentStop] = useState<string>("");
+  const [stops, setStops] = useState<Stop[]>([]);
+  const [selectedStop, setSelectedStop] = useState<string | null>(null);
   const [incident, setIncident] = useState({ type: "", description: "" });
 
   useEffect(() => {
@@ -61,22 +70,35 @@ export default function DriverMobilePage() {
   }, [tracking, currentTrip]);
 
   const fetchCurrentTrip = async () => {
-    // TODO: Fetch from API
+    // TODO: Fetch from API - for now use a mock trip ID
+    const tripId = "trip-1"; // This should come from the actual trip assignment
     setCurrentTrip({
-      id: "trip-1",
+      id: tripId,
       busId: "bus-1",
       route: { origin: "Panamá", destination: "David" },
       departureTime: new Date().toISOString(),
     });
-    fetchManifest("trip-1");
+    fetchStops(tripId);
   };
 
-  const fetchManifest = async (tripId: string) => {
-    // TODO: Fetch from API
-    setManifest([
-      { id: "1", name: "Juan Pérez", seat: "A1", boardingStop: "Panamá", destinationStop: "David", status: "boarded" },
-      { id: "2", name: "María García", seat: "A2", boardingStop: "Panamá", destinationStop: "Santiago", status: "pending" },
-    ]);
+  const fetchStops = async (tripId: string) => {
+    try {
+      const response = await fetch(`/api/mobile/driver/trips/${tripId}/stops`);
+      if (response.ok) {
+        const data = await response.json();
+        setStops(data.stops || []);
+        // Select first stop by default if available
+        if (data.stops && data.stops.length > 0 && !selectedStop) {
+          setSelectedStop(data.stops[0].stopId);
+        }
+      } else {
+        console.error("Failed to fetch stops");
+        setStops([]);
+      }
+    } catch (error) {
+      console.error("Error fetching stops:", error);
+      setStops([]);
+    }
   };
 
   const sendGPSUpdate = async (tripId: string, busId: string, pos: GPSPosition) => {
@@ -110,17 +132,39 @@ export default function DriverMobilePage() {
     setTracking(false);
   };
 
-  const markPassengerBoarded = (passengerId: string) => {
-    setManifest((prev) =>
-      prev.map((p) => (p.id === passengerId ? { ...p, status: "boarded" as const } : p))
+  const markPassengerBoarded = (ticketId: string, stopId: string) => {
+    setStops((prev) =>
+      prev.map((stop) => {
+        if (stop.stopId === stopId) {
+          return {
+            ...stop,
+            passengers: stop.passengers.map((p) =>
+              p.ticketId === ticketId ? { ...p, status: "boarded" } : p
+            ),
+          };
+        }
+        return stop;
+      })
     );
   };
 
-  const markPassengerNoShow = (passengerId: string) => {
-    setManifest((prev) =>
-      prev.map((p) => (p.id === passengerId ? { ...p, status: "no_show" as const } : p))
+  const markPassengerNoShow = (ticketId: string, stopId: string) => {
+    setStops((prev) =>
+      prev.map((stop) => {
+        if (stop.stopId === stopId) {
+          return {
+            ...stop,
+            passengers: stop.passengers.map((p) =>
+              p.ticketId === ticketId ? { ...p, status: "no_show" } : p
+            ),
+          };
+        }
+        return stop;
+      })
     );
   };
+
+  const selectedStopData = stops.find((s) => s.stopId === selectedStop);
 
   const reportIncident = async () => {
     if (!incident.type || !incident.description) {
@@ -141,13 +185,17 @@ export default function DriverMobilePage() {
   return (
     <div className="min-h-screen bg-background p-4">
       <div className="max-w-2xl mx-auto space-y-6">
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold mb-2">Driver Dashboard</h1>
-          {currentTrip && (
-            <p className="text-muted-foreground">
-              {currentTrip.route.origin} → {currentTrip.route.destination}
-            </p>
-          )}
+        {/* Header */}
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold mb-2">Driver Dashboard</h1>
+            {currentTrip && (
+              <p className="text-muted-foreground">
+                {currentTrip.route.origin} → {currentTrip.route.destination}
+              </p>
+            )}
+          </div>
+          <UniversalThemeToggle />
         </div>
 
         {/* GPS Tracking */}
@@ -196,78 +244,108 @@ export default function DriverMobilePage() {
           </div>
         </div>
 
-        {/* Current Stop */}
+        {/* Stops List - Main View */}
         <div className="bg-card border border-border rounded-xl p-6 shadow-lg">
-          <h2 className="text-xl font-semibold mb-4">Parada Actual</h2>
-          <input
-            type="text"
-            value={currentStop}
-            onChange={(e) => setCurrentStop(e.target.value)}
-            placeholder="Nombre de la parada"
-            className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-          />
-        </div>
-
-        {/* Manifest */}
-        <div className="bg-card border border-border rounded-xl p-6 shadow-lg">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold">Manifest de Pasajeros</h2>
-            <span className="text-sm text-muted-foreground">
-              {manifest.filter((p) => p.status === "boarded").length}/{manifest.length} abordados
-            </span>
-          </div>
-          <div className="space-y-2 max-h-96 overflow-y-auto">
-            {manifest.map((passenger) => (
-              <div
-                key={passenger.id}
-                className={`p-4 rounded-lg border ${
-                  passenger.status === "boarded"
-                    ? "bg-success/10 border-success/20"
-                    : passenger.status === "no_show"
-                    ? "bg-destructive/10 border-destructive/20"
-                    : "bg-muted/50 border-border"
-                }`}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex-1">
-                    <div className="font-semibold">{passenger.name}</div>
-                    <div className="text-sm text-muted-foreground">
-                      Asiento {passenger.seat} • {passenger.destinationStop}
+          <h2 className="text-xl font-semibold mb-4">Lista de Paradas</h2>
+          {stops.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              No hay paradas con pasajeros para este viaje
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {stops.map((stop) => (
+                <div
+                  key={stop.stopId}
+                  className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                    selectedStop === stop.stopId
+                      ? "bg-primary/10 border-primary"
+                      : "bg-muted/50 border-border hover:border-primary/50"
+                  }`}
+                  onClick={() => setSelectedStop(stop.stopId)}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <div className="font-semibold text-lg">{stop.stopName}</div>
+                      <div className="text-sm text-muted-foreground">
+                        {stop.kmPosition} km • {stop.passengerCount} pasajero{stop.passengerCount !== 1 ? "s" : ""}
+                      </div>
+                    </div>
+                    <div className="text-2xl font-bold text-primary">
+                      {stop.passengerCount}
                     </div>
                   </div>
-                  <div className="flex gap-2">
-                    {passenger.status === "pending" && (
-                      <>
-                        <button
-                          onClick={() => markPassengerBoarded(passenger.id)}
-                          className="px-3 py-1 bg-success text-success-foreground rounded text-sm font-medium"
-                        >
-                          Abordó
-                        </button>
-                        <button
-                          onClick={() => markPassengerNoShow(passenger.id)}
-                          className="px-3 py-1 bg-destructive text-destructive-foreground rounded text-sm font-medium"
-                        >
-                          No Show
-                        </button>
-                      </>
-                    )}
-                    {passenger.status === "boarded" && (
-                      <span className="px-3 py-1 bg-success text-success-foreground rounded text-sm font-medium">
-                        ✓ Abordado
-                      </span>
-                    )}
-                    {passenger.status === "no_show" && (
-                      <span className="px-3 py-1 bg-destructive text-destructive-foreground rounded text-sm font-medium">
-                        No Show
-                      </span>
-                    )}
-                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
+
+        {/* Passengers for Selected Stop */}
+        {selectedStopData && (
+          <div className="bg-card border border-border rounded-xl p-6 shadow-lg">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold">Pasajeros - {selectedStopData.stopName}</h2>
+              <span className="text-sm text-muted-foreground">
+                {selectedStopData.passengers.filter((p) => p.status === "boarded").length}/{selectedStopData.passengers.length} abordados
+              </span>
+            </div>
+            <div className="space-y-2 max-h-96 overflow-y-auto">
+              {selectedStopData.passengers.length === 0 ? (
+                <div className="text-center py-4 text-muted-foreground text-sm">
+                  No hay pasajeros para esta parada
+                </div>
+              ) : (
+                selectedStopData.passengers.map((passenger) => (
+                  <div
+                    key={passenger.ticketId}
+                    className={`p-4 rounded-lg border ${
+                      passenger.status === "boarded"
+                        ? "bg-success/10 border-success/20"
+                        : passenger.status === "no_show"
+                        ? "bg-destructive/10 border-destructive/20"
+                        : "bg-muted/50 border-border"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex-1">
+                        <div className="font-semibold">{passenger.passengerName}</div>
+                        <div className="text-sm text-muted-foreground">
+                          Asiento {passenger.seatId.substring(0, 8)}
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        {passenger.status === "pending" || passenger.status === "confirmed" ? (
+                          <>
+                            <button
+                              onClick={() => markPassengerBoarded(passenger.ticketId, selectedStopData.stopId)}
+                              className="px-3 py-1 bg-success text-success-foreground rounded text-sm font-medium"
+                            >
+                              Abordó
+                            </button>
+                            <button
+                              onClick={() => markPassengerNoShow(passenger.ticketId, selectedStopData.stopId)}
+                              className="px-3 py-1 bg-destructive text-destructive-foreground rounded text-sm font-medium"
+                            >
+                              No Show
+                            </button>
+                          </>
+                        ) : passenger.status === "boarded" ? (
+                          <span className="px-3 py-1 bg-success text-success-foreground rounded text-sm font-medium">
+                            ✓ Abordado
+                          </span>
+                        ) : (
+                          <span className="px-3 py-1 bg-destructive text-destructive-foreground rounded text-sm font-medium">
+                            No Show
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Incident Report */}
         <div className="bg-card border border-border rounded-xl p-6 shadow-lg">

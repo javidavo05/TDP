@@ -12,6 +12,8 @@ interface Route {
   distanceKm: number | null;
   estimatedDurationMinutes: number | null;
   basePrice: number;
+  isExpress: boolean;
+  expressPriceMultiplier: number;
   isActive: boolean;
 }
 
@@ -20,7 +22,7 @@ interface RouteStop {
   name: string;
   kmPosition: number;
   orderIndex: number;
-  priceAdjustment: number;
+  price: number; // Complete ticket price for this stop
 }
 
 export default function EditRoutePage() {
@@ -37,12 +39,14 @@ export default function EditRoutePage() {
     basePrice: "",
     distanceKm: "",
     estimatedDurationMinutes: "",
+    isExpress: false,
+    expressPriceMultiplier: "1.2",
     isActive: true,
   });
   const [newStop, setNewStop] = useState({
     name: "",
     kmPosition: "",
-    priceAdjustment: "0",
+    price: "0", // Complete ticket price for this stop
   });
 
   useEffect(() => {
@@ -67,6 +71,8 @@ export default function EditRoutePage() {
           basePrice: data.route.basePrice.toString(),
           distanceKm: data.route.distanceKm?.toString() || "",
           estimatedDurationMinutes: data.route.estimatedDurationMinutes?.toString() || "",
+          isExpress: data.route.isExpress || false,
+          expressPriceMultiplier: data.route.expressPriceMultiplier?.toString() || "1.2",
           isActive: data.route.isActive,
         });
       }
@@ -94,6 +100,8 @@ export default function EditRoutePage() {
           estimatedDurationMinutes: formData.estimatedDurationMinutes
             ? parseInt(formData.estimatedDurationMinutes)
             : undefined,
+          isExpress: formData.isExpress,
+          expressPriceMultiplier: parseFloat(formData.expressPriceMultiplier),
           isActive: formData.isActive,
         }),
       });
@@ -128,14 +136,14 @@ export default function EditRoutePage() {
           name: newStop.name,
           kmPosition: parseFloat(newStop.kmPosition),
           orderIndex: stops.length,
-          priceAdjustment: parseFloat(newStop.priceAdjustment),
+          price: parseFloat(newStop.price), // Complete ticket price for this stop
         }),
       });
 
       const data = await response.json();
 
       if (response.ok) {
-        setNewStop({ name: "", kmPosition: "", priceAdjustment: "0" });
+        setNewStop({ name: "", kmPosition: "", price: "0" });
         fetchRoute();
       } else {
         alert(`Error: ${data.error || "Error al agregar parada"}`);
@@ -273,6 +281,41 @@ export default function EditRoutePage() {
                 </div>
               </div>
 
+              <div className="border-t pt-6 space-y-4">
+                <div>
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={formData.isExpress}
+                      onChange={(e) => setFormData({ ...formData, isExpress: e.target.checked })}
+                      className="w-4 h-4"
+                    />
+                    <span className="text-sm font-medium">Ruta Expreso</span>
+                  </label>
+                  <p className="text-xs text-muted-foreground ml-6 mt-1">
+                    Las rutas expreso tienen un precio multiplicado para servicios sin paradas intermedias
+                  </p>
+                </div>
+                {formData.isExpress && (
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      Multiplicador de Precio Expreso
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="1"
+                      value={formData.expressPriceMultiplier}
+                      onChange={(e) => setFormData({ ...formData, expressPriceMultiplier: e.target.value })}
+                      className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      El precio base se multiplicará por este valor para servicios expreso
+                    </p>
+                  </div>
+                )}
+              </div>
+
               <div className="flex items-center gap-2">
                 <input
                   type="checkbox"
@@ -327,12 +370,12 @@ export default function EditRoutePage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium mb-1">Ajuste Precio</label>
+                    <label className="block text-xs font-medium mb-1">Precio Completo del Boleto</label>
                     <input
                       type="number"
                       step="0.01"
-                      value={newStop.priceAdjustment}
-                      onChange={(e) => setNewStop({ ...newStop, priceAdjustment: e.target.value })}
+                      value={newStop.price}
+                      onChange={(e) => setNewStop({ ...newStop, price: e.target.value })}
                       placeholder="0.00"
                       className="w-full px-3 py-2 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                     />
@@ -361,7 +404,7 @@ export default function EditRoutePage() {
                       <div>
                         <div className="font-semibold text-sm">{stop.name}</div>
                         <div className="text-xs text-muted-foreground">
-                          {stop.kmPosition} km • Ajuste: ${stop.priceAdjustment.toFixed(2)}
+                          {stop.kmPosition} km • Precio: ${stop.price.toFixed(2)}
                         </div>
                       </div>
                       <button

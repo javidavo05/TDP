@@ -15,6 +15,7 @@ export class User {
   ) {}
 
   static create(data: {
+    id?: string;
     email?: string;
     phone?: string;
     role?: UserRole;
@@ -22,7 +23,7 @@ export class User {
   }): User {
     const now = new Date();
     return new User(
-      crypto.randomUUID(),
+      data.id || crypto.randomUUID(),
       data.email || null,
       data.phone || null,
       data.role || "passenger",

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ThemeToggle } from "@/components/public/ThemeToggle";
+import { UniversalThemeToggle } from "@/components/ui/UniversalThemeToggle";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 
@@ -34,7 +34,7 @@ export default function AdminLoginPage() {
         return;
       }
 
-      // Check user role - must be admin or owner
+      // Get user role from database
       const { data: userData, error: userError } = await supabase
         .from("users")
         .select("role")
@@ -43,17 +43,33 @@ export default function AdminLoginPage() {
 
       const role = userData?.role || authData.user.user_metadata?.role;
 
-      if (role !== "admin" && role !== "owner") {
-        // Sign out if not admin/owner
-        await supabase.auth.signOut();
-        setError("No tienes permisos para acceder al panel administrativo");
-        setIsLoading(false);
-        return;
+      // Redirect based on role
+      if (role === "pos_agent") {
+        // If pos_agent, get their terminal and redirect
+        const { data: terminal } = await supabase
+          .from("pos_terminals")
+          .select("id")
+          .eq("assigned_user_id", authData.user.id)
+          .eq("is_active", true)
+          .single();
+        
+        if (terminal) {
+          window.location.href = `/pos/${terminal.id}`;
+        } else {
+          setError("No tienes una terminal asignada. Contacta al administrador.");
+          setIsLoading(false);
+          return;
+        }
+      } else if (role === "admin" || role === "bus_owner" || role === "financial") {
+        // Redirect to dashboard for admin, bus_owner, and financial
+        window.location.href = "/dashboard";
+      } else if (role === "driver" || role === "assistant") {
+        // Redirect to mobile app for drivers and assistants
+        window.location.href = "/mobile/driver";
+      } else {
+        // Regular passengers go to profile
+        window.location.href = "/profile";
       }
-
-      // Success - redirect to dashboard
-      // Use window.location for a full page reload to ensure session is loaded
-      window.location.href = "/dashboard";
     } catch (err: any) {
       setError(err.message || "Error al iniciar sesión. Por favor intenta de nuevo.");
       setIsLoading(false);
@@ -93,9 +109,9 @@ export default function AdminLoginPage() {
                 TDP Admin
               </span>
             </Link>
-            <h1 className="text-3xl font-bold mb-2">Acceso Administrativo</h1>
+            <h1 className="text-3xl font-bold mb-2">Iniciar Sesión</h1>
             <p className="text-muted-foreground">
-              Ingresa tus credenciales para continuar
+              Ingresa tus credenciales para acceder al sistema
             </p>
           </div>
 
@@ -182,7 +198,7 @@ export default function AdminLoginPage() {
 
         {/* Theme Toggle */}
         <div className="absolute top-4 right-4 z-20">
-          <ThemeToggle />
+          <UniversalThemeToggle />
         </div>
       </div>
     </div>

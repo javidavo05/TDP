@@ -32,13 +32,13 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { name, kmPosition, orderIndex, priceAdjustment } = body;
+    const { name, kmPosition, orderIndex, price } = body;
 
     const stop = await routeService.updateRouteStop(params.stopId, {
       name,
       kmPosition,
       orderIndex,
-      priceAdjustment,
+      price, // Complete ticket price for this stop
     });
 
     return NextResponse.json({ stop });

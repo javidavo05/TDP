@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ThemeToggle } from "@/components/public/ThemeToggle";
+import { UniversalThemeToggle } from "@/components/ui/UniversalThemeToggle";
 
 export function AdminNavbar() {
   const router = useRouter();
@@ -59,7 +59,7 @@ export function AdminNavbar() {
             </button>
 
             {/* Theme Toggle */}
-            <ThemeToggle />
+            <UniversalThemeToggle />
 
             {/* User Menu */}
             <div className="relative">
@@ -86,7 +86,7 @@ export function AdminNavbar() {
                     Dashboard
                   </Link>
                   <Link
-                    href="/account"
+                    href="/profile"
                     className="block px-4 py-2 text-sm hover:bg-muted transition-colors"
                     onClick={() => setShowMenu(false)}
                   >

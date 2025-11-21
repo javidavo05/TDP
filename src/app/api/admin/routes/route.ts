@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name, origin, destination, basePrice, distanceKm, estimatedDurationMinutes } = body;
+    const { name, origin, destination, basePrice, distanceKm, estimatedDurationMinutes, isExpress, expressPriceMultiplier } = body;
 
     if (!name || !origin || !destination || basePrice === undefined) {
       return NextResponse.json(
@@ -84,6 +84,8 @@ export async function POST(request: NextRequest) {
       basePrice,
       distanceKm,
       estimatedDurationMinutes,
+      isExpress: isExpress || false,
+      expressPriceMultiplier: expressPriceMultiplier || 1.2,
     });
 
     return NextResponse.json({ route }, { status: 201 });

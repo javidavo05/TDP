@@ -1,8 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { SeatSelector } from "@/components/bus/SeatSelector";
+import { SeatSelector } from "@/components/public/SeatSelector";
+import { seatAvailabilityService } from "@/lib/realtime/seatAvailability";
+import { useRealtimeSeats } from "@/hooks/useRealtimeSeats";
 import { format } from "date-fns";
+import { UniversalThemeToggle } from "@/components/ui/UniversalThemeToggle";
 
 interface Trip {
   id: string;
@@ -139,23 +142,77 @@ export default function POSPage() {
     }
   };
 
-  const getSeats = (): Seat[] => {
+  // Use realtime seats hook for selected trip
+  const { lockedSeats } = useRealtimeSeats(selectedTrip?.id || null);
+  const [soldSeats, setSoldSeats] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!selectedTrip) return;
+
+    // Fetch sold seats for this trip
+    const fetchSoldSeats = async () => {
+      try {
+        const response = await fetch(`/api/public/trips/${selectedTrip.id}/seats`);
+        if (response.ok) {
+          const data = await response.json();
+          setSoldSeats(new Set(data.soldSeats || []));
+        }
+      } catch (error) {
+        console.error("Error fetching sold seats:", error);
+      }
+    };
+
+    fetchSoldSeats();
+
+    // Subscribe to real-time updates
+    const unsubscribe = seatAvailabilityService.subscribe(selectedTrip.id, {
+      onSeatSold: (seatId) => {
+        setSoldSeats((prev) => new Set([...prev, seatId]));
+      },
+      onSeatLocked: () => {
+        // Locked seats are handled by useRealtimeSeats hook
+      },
+      onSeatUnlocked: () => {
+        // Unlocked seats are handled by useRealtimeSeats hook
+      },
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [selectedTrip?.id]);
+
+  const getSeats = () => {
     if (!selectedTrip?.bus?.seatMap?.seats) return [];
 
-    // Get booked seats for this trip
-    // TODO: Fetch from API
-    const bookedSeats: string[] = [];
+    return selectedTrip.bus.seatMap.seats.map((seat) => {
+      const isSold = soldSeats.has(seat.id);
+      const isLocked = lockedSeats.includes(seat.id);
+      
+      let status: "available" | "sold" | "selected" | "locked" | "disabled" | "extra_space" | "stair" | "aisle" = "available";
+      if (isSold) status = "sold";
+      else if (isLocked) status = "locked";
+      else if (seat.type === "disabled") status = "disabled";
+      else if (seat.type === "extra_space") status = "extra_space";
+      else if (seat.type === "stair") status = "stair";
+      else if (seat.type === "aisle") status = "aisle";
+      else if (seat.id === selectedSeat) status = "selected";
 
-    return selectedTrip.bus.seatMap.seats.map((seat) => ({
-      id: seat.id,
-      number: seat.number,
-      x: seat.x,
-      y: seat.y,
-      type: (seat.type as "single" | "double" | "aisle") || "single",
-      row: seat.row,
-      column: seat.column,
-      isAvailable: !bookedSeats.includes(seat.id),
-    }));
+      return {
+        id: seat.id,
+        number: seat.number,
+        x: seat.x,
+        y: seat.y,
+        type: (seat.type as "single" | "double" | "aisle" | "disabled" | "extra_space" | "stair") || "single",
+        row: seat.row,
+        column: seat.column,
+        floor: 1,
+        status,
+        isAvailable: !isSold && !isLocked,
+        isSelected: seat.id === selectedSeat,
+        isLocked,
+      };
+    });
   };
 
   const filteredTrips = trips.filter((trip) => {
@@ -172,8 +229,11 @@ export default function POSPage() {
       <div className="container mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-3xl font-bold">Terminal POS</h1>
-          <div className="text-sm text-muted-foreground">
-            Terminal: POS-001
+          <div className="flex items-center gap-4">
+            <div className="text-sm text-muted-foreground">
+              Terminal: POS-001
+            </div>
+            <UniversalThemeToggle />
           </div>
         </div>
 
@@ -242,8 +302,17 @@ export default function POSPage() {
                 <SeatSelector
                   seats={getSeats()}
                   selectedSeatId={selectedSeat}
-                  onSeatSelect={setSelectedSeat}
+                  onSeatSelect={async (seatId) => {
+                    if (selectedTrip) {
+                      // Lock the seat when selected
+                      await seatAvailabilityService.lockSeat(selectedTrip.id, seatId, 30000);
+                      setSelectedSeat(seatId);
+                    }
+                  }}
+                  lockedSeats={lockedSeats}
+                  tripId={selectedTrip?.id || ""}
                   className="min-h-[400px]"
+                  showLegend={true}
                 />
               </div>
             )}

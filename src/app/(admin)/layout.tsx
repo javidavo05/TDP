@@ -62,7 +62,9 @@ export default function AdminLayout({
 
         const role = userData?.role || user.user_metadata?.role;
 
-        if (role !== "admin" && role !== "owner") {
+        // Allow admin, bus_owner, and financial roles to access admin dashboard
+        const allowedRoles = ["admin", "bus_owner", "financial"];
+        if (!role || !allowedRoles.includes(role)) {
           // Not authorized - sign out and redirect
           await supabase.auth.signOut();
           if (!isLoginPage) {
@@ -72,7 +74,7 @@ export default function AdminLayout({
           return;
         }
 
-        // User is authenticated and has admin/owner role
+        // User is authenticated and has allowed role
         setIsAuthenticated(true);
       } catch (error) {
         console.error("Error checking auth:", error);
@@ -104,9 +106,12 @@ export default function AdminLayout({
     return null;
   }
 
+  // Don't show navbar on secondary display page
+  const isSecondaryDisplay = pathname?.includes("/pos/secondary-display");
+
   return (
     <div className="min-h-screen bg-background">
-      <AdminNavbar />
+      {!isSecondaryDisplay && <AdminNavbar />}
       <main className="flex-1">{children}</main>
     </div>
   );

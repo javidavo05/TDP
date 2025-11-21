@@ -37,7 +37,20 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
         }),
       });
 
-      const data = await response.json();
+      // Check if response has content before parsing JSON
+      const contentType = response.headers.get("content-type");
+      let data: any = {};
+      
+      if (contentType && contentType.includes("application/json")) {
+        const text = await response.text();
+        if (text) {
+          try {
+            data = JSON.parse(text);
+          } catch (e) {
+            throw new Error("Error al procesar la respuesta del servidor");
+          }
+        }
+      }
 
       if (!response.ok) {
         throw new Error(data.error || "Error al iniciar sesión");
@@ -46,6 +59,13 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
       await refresh();
       onClose();
       setFormData({ email: "", password: "", fullName: "", phone: "" });
+
+      // Redirect pos_agent users to their terminal
+      if (data.user?.role === "pos_agent" && data.terminalId) {
+        window.location.href = `/pos/${data.terminalId}`;
+      } else if (data.user?.role === "admin" || data.user?.role === "bus_owner") {
+        window.location.href = "/dashboard";
+      }
     } catch (err: any) {
       setError(err.message);
     } finally {

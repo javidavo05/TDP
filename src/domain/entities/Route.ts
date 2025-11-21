@@ -7,6 +7,8 @@ export class Route {
     public distanceKm: number | null,
     public estimatedDurationMinutes: number | null,
     public basePrice: number,
+    public isExpress: boolean,
+    public expressPriceMultiplier: number,
     public isActive: boolean,
     public createdAt: Date,
     public updatedAt: Date
@@ -19,6 +21,8 @@ export class Route {
     basePrice: number;
     distanceKm?: number;
     estimatedDurationMinutes?: number;
+    isExpress?: boolean;
+    expressPriceMultiplier?: number;
   }): Route {
     const now = new Date();
     return new Route(
@@ -29,6 +33,8 @@ export class Route {
       data.distanceKm || null,
       data.estimatedDurationMinutes || null,
       data.basePrice,
+      data.isExpress || false,
+      data.expressPriceMultiplier || 1.2,
       true,
       now,
       now

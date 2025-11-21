@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { TERMINALS } from "@/lib/constants";
+import { useTripSync } from "@/hooks/useTripSync";
 
 export default function SearchPage() {
   const [origin, setOrigin] = useState("");
@@ -10,8 +11,33 @@ export default function SearchPage() {
   const [loading, setLoading] = useState(false);
   const [trips, setTrips] = useState<any[]>([]);
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Subscribe to realtime changes using the sync hook
+  useTripSync({
+    onTripCreated: () => {
+      // Refresh search results when trips are created
+      if (origin && destination && date) {
+        handleSearch({ preventDefault: () => {} } as React.FormEvent);
+      }
+    },
+    onTripUpdated: () => {
+      // Refresh search results when trips are updated
+      if (origin && destination && date) {
+        handleSearch({ preventDefault: () => {} } as React.FormEvent);
+      }
+    },
+    onTicketCreated: () => {
+      // Refresh to update availability
+      if (origin && destination && date) {
+        handleSearch({ preventDefault: () => {} } as React.FormEvent);
+      }
+    },
+    enabled: !!date && trips.length > 0, // Only subscribe if we have results
+  });
+
+  const handleSearch = async (e: React.FormEvent | { preventDefault: () => void }) => {
+    if (e && 'preventDefault' in e) {
+      e.preventDefault();
+    }
     setLoading(true);
 
     try {

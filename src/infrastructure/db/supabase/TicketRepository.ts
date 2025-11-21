@@ -122,6 +122,9 @@ export class TicketRepository implements ITicketRepository {
       itbms: ticket.itbms?.toString() || "0",
       total_price: ticket.totalPrice?.toString() || ticket.price?.toString() || "0",
       boarded_at: ticket.boardedAt?.toISOString() || null,
+      passenger_id: ticket.passengerId || null,
+      passenger_document_id: ticket.passengerDocumentId || null,
+      pos_session_id: ticket.posSessionId || null,
     };
 
     const { data, error } = await supabase
@@ -144,6 +147,7 @@ export class TicketRepository implements ITicketRepository {
     if (ticket.passengerPhone !== undefined) updateData.passenger_phone = ticket.passengerPhone;
     if (ticket.passengerEmail !== undefined) updateData.passenger_email = ticket.passengerEmail;
     if (ticket.qrToken !== undefined) updateData.qr_token = ticket.qrToken;
+    if (ticket.posSessionId !== undefined) updateData.pos_session_id = ticket.posSessionId;
 
     const { data, error } = await supabase
       .from("tickets")
@@ -203,6 +207,7 @@ export class TicketRepository implements ITicketRepository {
       data.boarded_at ? new Date(data.boarded_at) : null,
       data.passenger_id || null,
       data.passenger_document_id || null,
+      data.pos_session_id || null,
       new Date(data.created_at),
       new Date(data.updated_at)
     );
@@ -228,6 +233,7 @@ export class TicketRepository implements ITicketRepository {
       boarded_at: ticket.boardedAt?.toISOString() || null,
       passenger_id: ticket.passengerId,
       passenger_document_id: ticket.passengerDocumentId,
+      pos_session_id: ticket.posSessionId,
     };
   }
 }

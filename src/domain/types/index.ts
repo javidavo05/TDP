@@ -1,5 +1,5 @@
 // User Roles
-export type UserRole = "passenger" | "admin" | "pos_agent" | "bus_owner" | "driver" | "assistant";
+export type UserRole = "passenger" | "admin" | "pos_agent" | "bus_owner" | "driver" | "assistant" | "financial" | "display";
 
 // Trip Status
 export type TripStatus = "scheduled" | "boarding" | "in_transit" | "completed" | "cancelled" | "delayed";
@@ -32,6 +32,20 @@ export interface SeatConfig {
   metadata?: Record<string, unknown>;
 }
 
+export interface LayoutShape {
+  id: string;
+  type: "rectangle" | "path" | "icon";
+  x: number;
+  y: number;
+  width?: number;
+  height?: number;
+  path?: { x: number; y: number }[];
+  iconType?: string;
+  fill: string;
+  stroke: string;
+  strokeWidth: number;
+}
+
 export interface SeatMap {
   seats: SeatConfig[];
   layout: {
@@ -40,6 +54,7 @@ export interface SeatMap {
     rows: number;
     columns: number;
   };
+  visualLayout?: LayoutShape[]; // Visual layout shapes drawn by user
 }
 
 // Bus Features

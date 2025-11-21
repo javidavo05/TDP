@@ -44,13 +44,41 @@ export function QRScanner({
   const [error, setError] = useState<string | null>(null);
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const isInitializedRef = useRef(false);
+  const hasScannedRef = useRef(false);
+
+  // Use refs for callbacks to avoid re-renders
+  const onScanSuccessRef = useRef(onScanSuccess);
+  const onScanErrorRef = useRef(onScanError);
+
+  // Update refs when callbacks change
+  useEffect(() => {
+    onScanSuccessRef.current = onScanSuccess;
+    onScanErrorRef.current = onScanError;
+  }, [onScanSuccess, onScanError]);
 
   useEffect(() => {
     if (!containerRef.current) return;
 
+    // Prevent multiple initializations
+    if (isInitializedRef.current) {
+      return;
+    }
+
+    // Check if scanner is already running
+    if (scannerRef.current) {
+      return;
+    }
+
+    isInitializedRef.current = true;
     const scanner = new Html5Qrcode(containerRef.current.id);
+    let isScanning = false;
 
     const startScanning = async () => {
+      // Prevent multiple starts
+      if (isScanning) return;
+      isScanning = true;
+
       try {
         await scanner.start(
           { facingMode: "environment" },
@@ -59,24 +87,38 @@ export function QRScanner({
             qrbox,
           },
           async (decodedText) => {
+            // Prevent processing the same QR code multiple times
+            if (hasScannedRef.current) {
+              return;
+            }
+            hasScannedRef.current = true;
+
             try {
               // Stop scanner before calling callback to avoid DOM errors
               await scanner.stop();
               stopAllVideoTracks();
               setScanning(false);
+              isScanning = false;
+              scannerRef.current = null;
+              isInitializedRef.current = false;
               // Call callback after stopping
-              onScanSuccess(decodedText);
+              onScanSuccessRef.current(decodedText);
             } catch (stopError) {
               // If stop fails, still call callback and try to clean up
               console.warn("Error stopping scanner:", stopError);
               stopAllVideoTracks();
               setScanning(false);
-              onScanSuccess(decodedText);
+              isScanning = false;
+              scannerRef.current = null;
+              isInitializedRef.current = false;
+              onScanSuccessRef.current(decodedText);
             }
           },
           (errorMessage) => {
-            if (onScanError) {
-              onScanError(errorMessage);
+            // Only log errors, don't call callback for every scan error
+            // "NotFoundException" is normal during scanning and should be ignored
+            if (errorMessage && !errorMessage.includes("NotFoundException")) {
+              console.warn("QR Scanner error:", errorMessage);
             }
           }
         );
@@ -84,10 +126,12 @@ export function QRScanner({
         setScanning(true);
         setError(null);
       } catch (err) {
+        isScanning = false;
+        isInitializedRef.current = false;
         const errorMessage = (err as Error).message;
         setError(errorMessage);
-        if (onScanError) {
-          onScanError(errorMessage);
+        if (onScanErrorRef.current) {
+          onScanErrorRef.current(errorMessage);
         }
       }
     };
@@ -107,6 +151,9 @@ export function QRScanner({
       // Always stop video tracks to ensure camera is off
       stopAllVideoTracks();
       setScanning(false);
+      isScanning = false;
+      isInitializedRef.current = false;
+      hasScannedRef.current = false;
     };
 
     // Handle page unload (closing tab/window)
@@ -134,7 +181,7 @@ export function QRScanner({
       // Stop scanner immediately
       stopScanner();
     };
-  }, [fps, qrbox, onScanSuccess, onScanError]);
+  }, [fps, qrbox]); // Removed callbacks from dependencies to prevent re-renders
 
   return (
     <div className="w-full">
@@ -156,4 +203,3 @@ export function QRScanner({
     </div>
   );
 }
-

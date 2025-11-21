@@ -62,6 +62,8 @@ export class RouteRepository implements IRouteRepository {
       distance_km: route.distanceKm,
       estimated_duration_minutes: route.estimatedDurationMinutes,
       base_price: route.basePrice.toString(),
+      is_express: route.isExpress,
+      express_price_multiplier: route.expressPriceMultiplier.toString(),
       is_active: route.isActive,
     };
 
@@ -84,6 +86,8 @@ export class RouteRepository implements IRouteRepository {
       distance_km: route.distanceKm,
       estimated_duration_minutes: route.estimatedDurationMinutes,
       base_price: route.basePrice.toString(),
+      is_express: route.isExpress,
+      express_price_multiplier: route.expressPriceMultiplier.toString(),
       is_active: route.isActive,
       updated_at: new Date().toISOString(),
     };
@@ -126,7 +130,7 @@ export class RouteRepository implements IRouteRepository {
       name: stop.name,
       km_position: stop.kmPosition.toString(),
       order_index: stop.orderIndex,
-      price_adjustment: stop.priceAdjustment.toString(),
+      price: stop.price.toString(),
     };
 
     const { data, error } = await supabase
@@ -145,7 +149,7 @@ export class RouteRepository implements IRouteRepository {
     if (stop.name !== undefined) stopData.name = stop.name;
     if (stop.kmPosition !== undefined) stopData.km_position = stop.kmPosition.toString();
     if (stop.orderIndex !== undefined) stopData.order_index = stop.orderIndex;
-    if (stop.priceAdjustment !== undefined) stopData.price_adjustment = stop.priceAdjustment.toString();
+    if (stop.price !== undefined) stopData.price = stop.price.toString();
 
     const { data, error } = await supabase
       .from("route_stops")
@@ -189,6 +193,8 @@ export class RouteRepository implements IRouteRepository {
       data.distance_km ? parseFloat(data.distance_km) : null,
       data.estimated_duration_minutes || null,
       parseFloat(data.base_price),
+      data.is_express || false,
+      parseFloat(data.express_price_multiplier || "1.2"),
       data.is_active,
       new Date(data.created_at),
       new Date(data.updated_at)
@@ -202,7 +208,7 @@ export class RouteRepository implements IRouteRepository {
       name: data.name,
       kmPosition: parseFloat(data.km_position),
       orderIndex: data.order_index,
-      priceAdjustment: parseFloat(data.price_adjustment || "0"),
+      price: parseFloat(data.price || "0"), // Complete ticket price for this stop
       createdAt: new Date(data.created_at),
     };
   }

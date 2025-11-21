@@ -4,6 +4,7 @@ import { TripRepository } from "@/infrastructure/db/supabase/TripRepository";
 import { PassengerRepository } from "@/infrastructure/db/supabase/PassengerRepository";
 import { TicketingService } from "@/services/public/ticketing/TicketingService";
 import { createClient } from "@/lib/supabase/server";
+import { rateLimit, RATE_LIMITS, createRateLimitHeaders } from "@/middleware/rateLimit";
 
 const ticketRepository = new TicketRepository();
 const tripRepository = new TripRepository();
@@ -12,6 +13,22 @@ const ticketingService = new TicketingService(ticketRepository, tripRepository, 
 
 export async function POST(request: NextRequest) {
   try {
+    // Rate limiting for ticket creation
+    const rateLimitResult = rateLimit(request, RATE_LIMITS.ticketCreation);
+    if (rateLimitResult.limited) {
+      return NextResponse.json(
+        { error: "Too many requests. Please try again later." },
+        {
+          status: 429,
+          headers: createRateLimitHeaders(
+            rateLimitResult.remaining,
+            rateLimitResult.resetTime,
+            RATE_LIMITS.ticketCreation.limit
+          ),
+        }
+      );
+    }
+
     const body = await request.json();
     const {
       tripId,
@@ -46,7 +63,17 @@ export async function POST(request: NextRequest) {
       passengerDocumentType,
     });
 
-    return NextResponse.json({ ticket }, { status: 201 });
+    return NextResponse.json(
+      { ticket },
+      {
+        status: 201,
+        headers: createRateLimitHeaders(
+          rateLimitResult.remaining - 1,
+          rateLimitResult.resetTime,
+          RATE_LIMITS.ticketCreation.limit
+        ),
+      }
+    );
   } catch (error) {
     console.error("Error creating ticket:", error);
     return NextResponse.json(
@@ -84,7 +111,7 @@ export async function GET(request: NextRequest) {
     }
 
     const page = parseInt(searchParams.get("page") || "1");
-    const limit = parseInt(searchParams.get("limit") || "50");
+    const limit = Math.min(parseInt(searchParams.get("limit") || "50"), 100); // Max 100 per page
     const offset = (page - 1) * limit;
 
     const result = await ticketingService.getUserTickets(user.id, { page, limit, offset });

@@ -66,10 +66,14 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // Allow POS routes for authenticated users (will be checked in the route itself)
+  const isPOSRoute = request.nextUrl.pathname.startsWith("/pos/");
+
   // Only redirect to login if it's an admin route and user is not authenticated
   if (
     !user &&
     !isPublicRoute &&
+    !isPOSRoute &&
     request.nextUrl.pathname.startsWith("/dashboard")
   ) {
     const url = request.nextUrl.clone();

@@ -75,7 +75,7 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { name, origin, destination, basePrice, distanceKm, estimatedDurationMinutes, isActive } = body;
+    const { name, origin, destination, basePrice, distanceKm, estimatedDurationMinutes, isActive, isExpress, expressPriceMultiplier } = body;
 
     const route = await routeService.updateRoute(params.id, {
       name,
@@ -85,6 +85,8 @@ export async function PUT(
       distanceKm,
       estimatedDurationMinutes,
       isActive,
+      isExpress,
+      expressPriceMultiplier,
     });
 
     return NextResponse.json({ route });

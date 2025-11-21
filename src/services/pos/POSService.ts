@@ -1,5 +1,10 @@
-import { Ticket, Payment } from "@/domain/entities";
-import { ITicketRepository, IPaymentRepository } from "@/domain/repositories";
+import { Ticket, Payment, POSTransaction } from "@/domain/entities";
+import {
+  ITicketRepository,
+  IPaymentRepository,
+  IPOSCashSessionRepository,
+  IPOSTransactionRepository,
+} from "@/domain/repositories";
 import { PaymentMethod, TicketStatus } from "@/domain/types";
 import { PaymentProviderFactory } from "@/infrastructure/payments/PaymentProviderFactory";
 import { calculateITBMS, ITBMS_RATE } from "@/lib/constants";
@@ -17,15 +22,39 @@ export interface POSSaleData {
   paymentMethod: PaymentMethod;
   amount: number;
   terminalId: string;
+  sessionId: string; // Required: active cash session
+  receivedAmount?: number; // For cash payments: amount received from customer
+  processedByUserId: string; // User processing the sale
 }
 
 export class POSService {
   constructor(
     private ticketRepository: ITicketRepository,
-    private paymentRepository: IPaymentRepository
+    private paymentRepository: IPaymentRepository,
+    private sessionRepository: IPOSCashSessionRepository,
+    private transactionRepository: IPOSTransactionRepository
   ) {}
 
-  async processSale(data: POSSaleData): Promise<{ ticket: Ticket; payment: Payment }> {
+  async processSale(data: POSSaleData): Promise<{ ticket: Ticket; payment: Payment; transaction: POSTransaction }> {
+    // Verify active session
+    const session = await this.sessionRepository.findById(data.sessionId);
+    if (!session || !session.isActive()) {
+      throw new Error("No active cash session found. Please open the cash register first.");
+    }
+
+    // Calculate ITBMS and total
+    const itbms = calculateITBMS(data.amount);
+    const totalAmount = data.amount + itbms;
+    let receivedAmount = data.receivedAmount;
+    let changeAmount = 0;
+
+    if (data.paymentMethod === "cash") {
+      if (!receivedAmount || receivedAmount < totalAmount) {
+        throw new Error(`Insufficient payment. Expected: $${totalAmount.toFixed(2)}, Received: $${receivedAmount?.toFixed(2) || "0.00"}`);
+      }
+      changeAmount = receivedAmount - totalAmount;
+    }
+
     // Create ticket
     const ticket = await this.ticketRepository.create({
       tripId: data.tripId,
@@ -40,11 +69,12 @@ export class POSService {
       price: data.amount,
       status: "pending" as TicketStatus,
       qrCode: this.generateQRCode(),
+      posSessionId: data.sessionId,
+      itbms: itbms,
     });
 
     // Process payment
     let payment: Payment;
-    const itbms = calculateITBMS(data.amount);
 
     if (data.paymentMethod === "cash") {
       // Cash payment - immediate confirmation
@@ -57,12 +87,18 @@ export class POSService {
       payment.markAsCompleted("pos-cash", { terminalId: data.terminalId });
       payment = await this.paymentRepository.create(payment);
 
+      // Update payment with session and amounts
+      payment.posSessionId = data.sessionId;
+      payment.receivedAmount = receivedAmount!;
+      payment.changeAmount = changeAmount;
+      payment = await this.paymentRepository.update(payment);
+
       // Update ticket to paid
       await this.ticketRepository.update(ticket.id, {
         status: "paid" as TicketStatus,
       });
     } else {
-      // Online payment - use payment provider
+      // Card/Online payment - use payment provider
       const provider = PaymentProviderFactory.getProvider(data.paymentMethod);
 
       payment = Payment.create({
@@ -88,22 +124,43 @@ export class POSService {
           tripId: data.tripId,
           seatId: data.seatId,
           terminalId: data.terminalId,
+          sessionId: data.sessionId,
         },
       });
 
       if (response.status === "completed") {
         payment.markAsCompleted(response.transactionId, response.metadata);
+        payment.posSessionId = data.sessionId;
+        payment = await this.paymentRepository.update(payment);
         await this.ticketRepository.update(ticket.id, {
           status: "paid" as TicketStatus,
         });
       } else if (response.status === "failed") {
         payment.markAsFailed(response.error);
+        payment = await this.paymentRepository.update(payment);
       }
-
-      payment = await this.paymentRepository.update(payment);
     }
 
-    return { ticket, payment };
+    // Create POS transaction
+    const transaction = POSTransaction.create({
+      sessionId: data.sessionId,
+      terminalId: data.terminalId,
+      ticketId: ticket.id,
+      paymentId: payment.id,
+      transactionType: "sale",
+      amount: totalAmount,
+      paymentMethod: data.paymentMethod,
+      receivedAmount: receivedAmount || null,
+      changeAmount,
+      processedByUserId: data.processedByUserId,
+    });
+    await this.transactionRepository.create(transaction);
+
+    // Update session totals
+    session.addSale(totalAmount, data.paymentMethod);
+    await this.sessionRepository.update(session);
+
+    return { ticket, payment, transaction };
   }
 
   async getDailyReport(terminalId: string, date: Date): Promise<{

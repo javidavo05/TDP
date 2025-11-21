@@ -28,18 +28,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check user role - must be admin or owner
+    // Check user role - must be admin, owner, or pos_agent
     const { data: userData, error: userError } = await supabase
       .from("users")
       .select("role")
       .eq("id", authData.user.id)
       .single();
 
+    const role = userData?.role || authData.user.user_metadata?.role;
+
     if (userError || !userData) {
       // If user doesn't exist in users table, check metadata
-      const role = authData.user.user_metadata?.role;
-      if (role !== "admin" && role !== "owner") {
-        // Sign out if not admin/owner
+      if (role !== "admin" && role !== "owner" && role !== "pos_agent") {
+        // Sign out if not admin/owner/pos_agent
         await supabase.auth.signOut();
         return NextResponse.json(
           { error: "No tienes permisos para acceder al panel administrativo" },
@@ -48,7 +49,7 @@ export async function POST(request: NextRequest) {
       }
     } else {
       // Check role from database
-      if (userData.role !== "admin" && userData.role !== "owner") {
+      if (userData.role !== "admin" && userData.role !== "owner" && userData.role !== "pos_agent") {
         await supabase.auth.signOut();
         return NextResponse.json(
           { error: "No tienes permisos para acceder al panel administrativo" },
@@ -57,12 +58,29 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // If user is pos_agent, get their assigned terminal
+    let terminalId = null;
+    const userRole = userData?.role || authData.user.user_metadata?.role;
+    if (userRole === "pos_agent") {
+      const { data: terminal } = await supabase
+        .from("pos_terminals")
+        .select("id")
+        .eq("assigned_user_id", authData.user.id)
+        .eq("is_active", true)
+        .single();
+      
+      if (terminal) {
+        terminalId = terminal.id;
+      }
+    }
+
     return NextResponse.json({
       user: {
         id: authData.user.id,
         email: authData.user.email,
-        role: userData?.role || authData.user.user_metadata?.role,
+        role: userRole,
       },
+      terminalId, // Include terminal ID for pos_agent users
       message: "Inicio de sesión exitoso",
     });
   } catch (error) {

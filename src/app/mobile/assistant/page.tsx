@@ -5,6 +5,7 @@ import { QRScanner } from "@/components/QRScanner";
 import { format } from "date-fns";
 import { triggerSuccessFeedback, triggerErrorFeedback } from "@/lib/utils/feedback";
 import { FeedbackAnimation } from "@/components/admin/FeedbackAnimation";
+import { UniversalThemeToggle } from "@/components/ui/UniversalThemeToggle";
 
 interface Ticket {
   id: string;
@@ -154,9 +155,13 @@ export default function AssistantMobilePage() {
       )}
       
       <div className="max-w-2xl mx-auto">
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold mb-2">Assistant - Validación de Tickets</h1>
-          <p className="text-muted-foreground">Escanea códigos QR para validar pasajeros</p>
+        {/* Header */}
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold mb-2">Assistant - Validación de Tickets</h1>
+            <p className="text-muted-foreground">Escanea códigos QR para validar pasajeros</p>
+          </div>
+          <UniversalThemeToggle />
         </div>
 
         {/* Scanner Section */}

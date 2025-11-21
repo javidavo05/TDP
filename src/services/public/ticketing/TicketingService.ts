@@ -98,14 +98,16 @@ export class TicketingService {
       passengerDocumentId: data.passengerDocumentId,
     });
 
-    // Reserve seat in trip
-    if (!trip.reserveSeat()) {
+    // Verify seat is still available (race condition protection)
+    if (trip.availableSeats <= 0) {
       throw new Error("No available seats");
     }
 
-    // Save ticket and update trip
+    // Save ticket (trigger will update available_seats automatically)
     const savedTicket = await this.ticketRepository.create(ticket);
-    await this.tripRepository.update(trip);
+    
+    // Note: available_seats will be updated by database trigger when ticket status becomes 'paid' or 'boarded'
+    // We don't need to manually update the trip anymore
 
     return savedTicket;
   }

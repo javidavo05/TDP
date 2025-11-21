@@ -1,63 +1,69 @@
+"use client";
+
 import { HeroSection } from "@/components/public/HeroSection";
 import { TripCard } from "@/components/public/TripCard";
+import { useEffect, useState } from "react";
 
-// Mock data for upcoming trips - will be replaced with real data
-const upcomingTrips = [
-  {
-    id: "1",
-    origin: "Panamá",
-    destination: "David",
-    departureTime: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
-    arrivalTime: new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString(),
-    price: 25.00,
-    availableSeats: 15,
-    totalSeats: 45,
-    busClass: "Ejecutivo",
-    bus: {
-      features: {
-        wifi: true,
-        ac: true,
-        bathroom: true,
-      },
-    },
-  },
-  {
-    id: "2",
-    origin: "David",
-    destination: "Santiago",
-    departureTime: new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString(),
-    arrivalTime: new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString(),
-    price: 18.00,
-    availableSeats: 8,
-    totalSeats: 40,
-    busClass: "Económico",
-    bus: {
-      features: {
-        ac: true,
-      },
-    },
-  },
-  {
-    id: "3",
-    origin: "Santiago",
-    destination: "Panamá",
-    departureTime: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
-    arrivalTime: new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString(),
-    price: 22.00,
-    availableSeats: 32,
-    totalSeats: 50,
-    busClass: "Premium",
-    bus: {
-      features: {
-        wifi: true,
-        ac: true,
-        bathroom: true,
-      },
-    },
-  },
-];
+interface UpcomingTrip {
+  id: string;
+  origin: string;
+  destination: string;
+  departureTime: string;
+  arrivalTime: string | null;
+  price: number;
+  availableSeats: number;
+  totalSeats: number;
+  busClass: string;
+  bus: {
+    features: {
+      wifi?: boolean;
+      ac?: boolean;
+      bathroom?: boolean;
+    };
+  };
+}
 
 export default function PublicLandingPage() {
+  const [upcomingTrips, setUpcomingTrips] = useState<UpcomingTrip[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchUpcomingTrips();
+    // Refresh every 30 seconds
+    const interval = setInterval(fetchUpcomingTrips, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const fetchUpcomingTrips = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await fetch("/api/public/trips/upcoming");
+      const data = await response.json();
+      
+      if (response.ok) {
+        setUpcomingTrips(data.trips || []);
+      } else {
+        setError(data.error || "Error al cargar los viajes");
+      }
+    } catch (err) {
+      console.error("Error fetching upcoming trips:", err);
+      setError("Error al cargar los viajes");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getBusClassLabel = (busClass: string): string => {
+    const labels: Record<string, string> = {
+      economico: "Económico",
+      ejecutivo: "Ejecutivo",
+      premium: "Premium",
+    };
+    return labels[busClass] || busClass;
+  };
+
   return (
     <div className="flex flex-col">
       {/* Hero Section */}
@@ -75,30 +81,52 @@ export default function PublicLandingPage() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {upcomingTrips.map((trip, index) => (
-              <div
-                key={trip.id}
-                className="animate-fadeInUp"
-                style={{ animationDelay: `${index * 100}ms` }}
-              >
-                <TripCard trip={trip} />
+          {loading ? (
+            <div className="text-center py-12">
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              <p className="mt-4 text-muted-foreground">Cargando viajes...</p>
+            </div>
+          ) : error ? (
+            <div className="text-center py-12">
+              <p className="text-destructive">{error}</p>
+            </div>
+          ) : upcomingTrips.length === 0 ? (
+            <div className="text-center py-12">
+              <p className="text-muted-foreground">No hay viajes disponibles en este momento</p>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {upcomingTrips.map((trip, index) => (
+                  <div
+                    key={trip.id}
+                    className="animate-fadeInUp"
+                    style={{ animationDelay: `${index * 100}ms` }}
+                  >
+                    <TripCard 
+                      trip={{
+                        ...trip,
+                        busClass: getBusClassLabel(trip.busClass),
+                      }}
+                    />
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
 
-          {/* View All Link */}
-          <div className="text-center mt-12 animate-fadeInUp" style={{ animationDelay: "400ms" }}>
-            <a
-              href="/search"
-              className="inline-flex items-center gap-2 text-primary hover:text-primary-dark font-semibold transition-colors"
-            >
-              Ver todos los viajes
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </a>
-          </div>
+              {/* View All Link */}
+              <div className="text-center mt-12 animate-fadeInUp" style={{ animationDelay: "400ms" }}>
+                <a
+                  href="/search"
+                  className="inline-flex items-center gap-2 text-primary hover:text-primary-dark font-semibold transition-colors"
+                >
+                  Ver todos los viajes
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </a>
+              </div>
+            </>
+          )}
         </div>
       </section>
 

@@ -31,10 +31,13 @@ export class TripRepository implements ITripRepository {
     }
 
     if (filters.date) {
+      // Use UTC to avoid timezone issues
       const startOfDay = new Date(filters.date);
-      startOfDay.setHours(0, 0, 0, 0);
+      startOfDay.setUTCHours(0, 0, 0, 0);
       const endOfDay = new Date(filters.date);
-      endOfDay.setHours(23, 59, 59, 999);
+      endOfDay.setUTCHours(23, 59, 59, 999);
+
+      console.log(`[TripRepository.search] Filtering by date: ${filters.date} (${startOfDay.toISOString()} to ${endOfDay.toISOString()})`);
 
       query = query
         .gte("departure_time", startOfDay.toISOString())
@@ -74,10 +77,11 @@ export class TripRepository implements ITripRepository {
     let query = supabase.from("trips").select("*").eq("route_id", routeId);
 
     if (date) {
+      // Use UTC to avoid timezone issues
       const startOfDay = new Date(date);
-      startOfDay.setHours(0, 0, 0, 0);
+      startOfDay.setUTCHours(0, 0, 0, 0);
       const endOfDay = new Date(date);
-      endOfDay.setHours(23, 59, 59, 999);
+      endOfDay.setUTCHours(23, 59, 59, 999);
 
       query = query
         .gte("departure_time", startOfDay.toISOString())
@@ -113,10 +117,55 @@ export class TripRepository implements ITripRepository {
     };
   }
 
+  async findByOwner(ownerId: string, params?: PaginationParams): Promise<PaginatedResponse<Trip>> {
+    const supabase = await createClient();
+    const limit = params?.limit || 50;
+    const offset = params?.offset || 0;
+
+    // First get all bus IDs for this owner
+    const { data: buses, error: busesError } = await supabase
+      .from("buses")
+      .select("id")
+      .eq("owner_id", ownerId);
+
+    if (busesError) throw new Error(`Failed to find buses by owner: ${busesError.message}`);
+
+    if (!buses || buses.length === 0) {
+      return {
+        data: [],
+        total: 0,
+        page: params?.page || 1,
+        limit,
+        hasMore: false,
+      };
+    }
+
+    const busIds = buses.map((b) => b.id);
+
+    const { data, error, count } = await supabase
+      .from("trips")
+      .select("*", { count: "exact" })
+      .in("bus_id", busIds)
+      .range(offset, offset + limit - 1)
+      .order("departure_time", { ascending: false });
+
+    if (error) throw new Error(`Failed to find trips by owner: ${error.message}`);
+
+    return {
+      data: (data || []).map((d: any) => this.mapToEntity(d)),
+      total: count || 0,
+      page: params?.page || 1,
+      limit,
+      hasMore: (count || 0) > offset + limit,
+    };
+  }
+
   async findUpcoming(hours: number = 24): Promise<Trip[]> {
     const supabase = await createClient();
     const now = new Date();
     const future = new Date(now.getTime() + hours * 60 * 60 * 1000);
+
+    console.log(`[TripRepository] Finding upcoming trips: from ${now.toISOString()} to ${future.toISOString()}`);
 
     const { data, error } = await supabase
       .from("trips")
@@ -126,7 +175,12 @@ export class TripRepository implements ITripRepository {
       .in("status", ["scheduled", "boarding"])
       .order("departure_time", { ascending: true });
 
-    if (error) throw new Error(`Failed to find upcoming trips: ${error.message}`);
+    if (error) {
+      console.error(`[TripRepository] Error finding upcoming trips:`, error);
+      throw new Error(`Failed to find upcoming trips: ${error.message}`);
+    }
+
+    console.log(`[TripRepository] Found ${data?.length || 0} upcoming trips`);
     return (data || []).map((d: any) => this.mapToEntity(d));
   }
 

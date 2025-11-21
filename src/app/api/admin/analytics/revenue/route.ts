@@ -19,11 +19,34 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const userData = await supabase
+      .from("users")
+      .select("role")
+      .eq("id", user.id)
+      .single();
+
+    if (!["admin", "bus_owner"].includes(userData.data?.role || "")) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const searchParams = request.nextUrl.searchParams;
-    const ownerId = searchParams.get("ownerId");
+    let ownerId = searchParams.get("ownerId");
     const busId = searchParams.get("busId");
     const startDate = searchParams.get("startDate");
     const endDate = searchParams.get("endDate");
+
+    // If bus_owner, automatically use their ownerId
+    if (userData.data?.role === "bus_owner" && !ownerId) {
+      const { data: busOwner } = await supabase
+        .from("bus_owners")
+        .select("id")
+        .eq("user_id", user.id)
+        .single();
+
+      if (busOwner) {
+        ownerId = busOwner.id;
+      }
+    }
 
     if (busId && startDate) {
       const date = new Date(startDate);
@@ -34,6 +57,16 @@ export async function GET(request: NextRequest) {
     if (ownerId && startDate && endDate) {
       const start = new Date(startDate);
       const end = new Date(endDate);
+      
+      // Limit date range to 1 year maximum
+      const maxDateRange = 365 * 24 * 60 * 60 * 1000; // 1 year in milliseconds
+      if (end.getTime() - start.getTime() > maxDateRange) {
+        return NextResponse.json(
+          { error: "Date range cannot exceed 1 year" },
+          { status: 400 }
+        );
+      }
+      
       const revenue = await analyticsService.getOwnerRevenue(ownerId, start, end);
       return NextResponse.json({ revenue });
     }

@@ -14,6 +14,8 @@ export default function NewRoutePage() {
     basePrice: "",
     distanceKm: "",
     estimatedDurationMinutes: "",
+    isExpress: false,
+    expressPriceMultiplier: "1.2",
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -33,6 +35,8 @@ export default function NewRoutePage() {
           estimatedDurationMinutes: formData.estimatedDurationMinutes
             ? parseInt(formData.estimatedDurationMinutes)
             : undefined,
+          isExpress: formData.isExpress,
+          expressPriceMultiplier: parseFloat(formData.expressPriceMultiplier),
         }),
       });
 
@@ -142,6 +146,42 @@ export default function NewRoutePage() {
                   className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
                 />
               </div>
+            </div>
+
+            <div className="border-t pt-6 space-y-4">
+              <div>
+                <label className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    checked={formData.isExpress}
+                    onChange={(e) => setFormData({ ...formData, isExpress: e.target.checked })}
+                    className="w-4 h-4"
+                  />
+                  <span className="text-sm font-medium">Ruta Expreso</span>
+                </label>
+                <p className="text-xs text-muted-foreground ml-6 mt-1">
+                  Las rutas expreso tienen un precio multiplicado para servicios sin paradas intermedias
+                </p>
+              </div>
+              {formData.isExpress && (
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Multiplicador de Precio Expreso
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="1"
+                    value={formData.expressPriceMultiplier}
+                    onChange={(e) => setFormData({ ...formData, expressPriceMultiplier: e.target.value })}
+                    placeholder="1.2"
+                    className="w-full px-4 py-2 bg-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    El precio base se multiplicará por este valor para servicios expreso
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="flex gap-4">

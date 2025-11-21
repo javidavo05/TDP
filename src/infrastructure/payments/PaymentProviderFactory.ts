@@ -6,6 +6,7 @@ import { PagueloFacilProvider } from "./paguelofacil/PagueloFacilProvider";
 import { TilopayProvider } from "./tilopay/TilopayProvider";
 import { PayUProvider } from "./payu/PayUProvider";
 import { BanescoProvider } from "./banesco/BanescoProvider";
+import { CardProvider } from "./card/CardProvider";
 
 export class PaymentProviderFactory {
   private static providers: Map<PaymentMethod, IPaymentProvider> = new Map();
@@ -36,6 +37,9 @@ export class PaymentProviderFactory {
       case "banesco":
         provider = new BanescoProvider();
         break;
+      case "card":
+        provider = new CardProvider();
+        break;
       default:
         throw new Error(`Payment provider not implemented for method: ${method}`);
     }
@@ -52,6 +56,7 @@ export class PaymentProviderFactory {
       new TilopayProvider(),
       new PayUProvider(),
       new BanescoProvider(),
+      new CardProvider(),
     ];
   }
 }
