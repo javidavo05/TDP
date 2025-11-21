@@ -72,9 +72,15 @@ export async function GET(
           assignment: assignment.data
             ? {
                 date: assignment.data.date,
-                hour: assignment.data.schedules?.hour,
-                isExpress: assignment.data.schedules?.is_express,
-                route: assignment.data.schedules?.routes
+                hour: Array.isArray(assignment.data.schedules) 
+                  ? assignment.data.schedules[0]?.hour 
+                  : assignment.data.schedules?.hour,
+                isExpress: Array.isArray(assignment.data.schedules)
+                  ? assignment.data.schedules[0]?.is_express
+                  : assignment.data.schedules?.is_express,
+                route: Array.isArray(assignment.data.schedules)
+                  ? assignment.data.schedules[0]?.routes
+                  : assignment.data.schedules?.routes
                   ? {
                       origin: assignment.data.schedules.routes.origin,
                       destination: assignment.data.schedules.routes.destination,
