@@ -12,16 +12,18 @@ function CheckoutContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [trip, setTrip] = useState<any>(null);
+  const [seats, setSeats] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
-  const [formData, setFormData] = useState({
-    passengerName: "",
-    passengerEmail: "",
-    passengerPhone: "",
-    passengerDocumentId: "",
-    passengerDocumentType: "cedula" as "cedula" | "pasaporte",
-    paymentMethod: "yappy" as string,
-  });
+  const [passengers, setPassengers] = useState<Array<{
+    seatId: string;
+    name: string;
+    documentId: string;
+    phone: string;
+    email: string;
+    emergencyPhone: string;
+  }>>([]);
+  const [paymentMethod, setPaymentMethod] = useState<string>("yappy");
   const [ticketId, setTicketId] = useState<string | null>(null);
   const [discount, setDiscount] = useState<{
     couponDiscount: number;
@@ -46,8 +48,23 @@ function CheckoutContent() {
   useEffect(() => {
     if (tripId) {
       fetchTrip();
+      fetchSeats();
     }
   }, [tripId]);
+
+  useEffect(() => {
+    // Initialize passengers array with one form per seat
+    if (seatIds.length > 0 && passengers.length === 0) {
+      setPassengers(seatIds.map(seatId => ({
+        seatId,
+        name: "",
+        documentId: "",
+        phone: "",
+        email: "",
+        emergencyPhone: "",
+      })));
+    }
+  }, [seatIds]);
 
   const fetchTrip = async () => {
     try {
@@ -63,36 +80,83 @@ function CheckoutContent() {
     }
   };
 
+  const fetchSeats = async () => {
+    try {
+      const response = await fetch(`/api/public/trips/${tripId}/seats`);
+      const data = await response.json();
+      if (response.ok) {
+        setSeats(data.seats || []);
+      }
+    } catch (error) {
+      console.error("Error fetching seats:", error);
+    }
+  };
+
+  const updatePassenger = (index: number, field: string, value: string) => {
+    setPassengers(prev => prev.map((p, i) => 
+      i === index ? { ...p, [field]: value } : p
+    ));
+  };
+
+  const getSeatNumber = (seatId: string): string => {
+    const seat = seats.find(s => s.id === seatId);
+    return seat?.number || seatId;
+  };
+
+  const validatePassengers = (): boolean => {
+    // Validate that all required fields are filled
+    for (const passenger of passengers) {
+      if (!passenger.name.trim()) {
+        alert("Por favor complete el nombre de todos los pasajeros");
+        return false;
+      }
+      if (!passenger.documentId.trim()) {
+        alert("Por favor complete la cédula de todos los pasajeros");
+        return false;
+      }
+      if (!passenger.phone.trim()) {
+        alert("Por favor complete el teléfono de todos los pasajeros");
+        return false;
+      }
+    }
+    return true;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    if (!validatePassengers()) {
+      return;
+    }
+    
     // Si es Yappy o PagueloFacil, el componente manejará el pago
-    if (formData.paymentMethod === "yappy" || formData.paymentMethod === "paguelofacil") {
+    if (paymentMethod === "yappy" || paymentMethod === "paguelofacil") {
       // Solo crear los tickets si no existen
-      if (!ticketId && seatIds.length > 0) {
+      if (!ticketId && passengers.length > 0) {
         setProcessing(true);
         try {
-          // Create tickets for each seat
-          const ticketPromises = seatIds.map((seatId) =>
+          // Create tickets for each passenger
+          const ticketPromises = passengers.map((passenger) =>
             fetch("/api/public/tickets", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 tripId,
-                seatId,
-                passengerName: formData.passengerName,
-                passengerEmail: formData.passengerEmail,
-                passengerPhone: formData.passengerPhone,
-                passengerDocumentId: formData.passengerDocumentId,
-                passengerDocumentType: formData.passengerDocumentType,
-                price: subtotalAfterDiscount / seatIds.length, // Price per ticket after discounts
-                originalPrice: subtotal / seatIds.length, // Original price per ticket before discounts
-                discountAmount: discount.totalDiscount / seatIds.length,
-                couponDiscount: discount.couponDiscount / seatIds.length,
-                seniorDiscount: discount.seniorDiscount / seatIds.length,
+                seatId: passenger.seatId,
+                passengerName: passenger.name,
+                passengerEmail: passenger.email,
+                passengerPhone: passenger.phone,
+                passengerDocumentId: passenger.documentId,
+                passengerDocumentType: "cedula", // Default to cedula
+                price: subtotalAfterDiscount / passengers.length, // Price per ticket after discounts
+                originalPrice: subtotal / passengers.length, // Original price per ticket before discounts
+                discountAmount: discount.totalDiscount / passengers.length,
+                couponDiscount: discount.couponDiscount / passengers.length,
+                seniorDiscount: discount.seniorDiscount / passengers.length,
                 discountCode: discount.couponCode,
                 isSenior: discount.isSenior,
                 destinationStopId: trip.routeId,
+                emergencyPhone: passenger.emergencyPhone,
               }),
             })
           );
@@ -119,31 +183,32 @@ function CheckoutContent() {
     setProcessing(true);
 
     try {
-      // Create tickets for each seat
-      if (seatIds.length === 0) {
+      // Create tickets for each passenger
+      if (passengers.length === 0) {
         throw new Error("No se han seleccionado asientos");
       }
 
-      const ticketPromises = seatIds.map((seatId) =>
+      const ticketPromises = passengers.map((passenger) =>
         fetch("/api/public/tickets", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             tripId,
-            seatId,
-            passengerName: formData.passengerName,
-            passengerEmail: formData.passengerEmail,
-            passengerPhone: formData.passengerPhone,
-            passengerDocumentId: formData.passengerDocumentId,
-            passengerDocumentType: formData.passengerDocumentType,
-            price: subtotalAfterDiscount / seatIds.length, // Price per ticket after discounts
-            originalPrice: subtotal / seatIds.length, // Original price per ticket before discounts
-            discountAmount: discount.totalDiscount / seatIds.length,
-            couponDiscount: discount.couponDiscount / seatIds.length,
-            seniorDiscount: discount.seniorDiscount / seatIds.length,
+            seatId: passenger.seatId,
+            passengerName: passenger.name,
+            passengerEmail: passenger.email,
+            passengerPhone: passenger.phone,
+            passengerDocumentId: passenger.documentId,
+            passengerDocumentType: "cedula", // Default to cedula
+            price: subtotalAfterDiscount / passengers.length, // Price per ticket after discounts
+            originalPrice: subtotal / passengers.length, // Original price per ticket before discounts
+            discountAmount: discount.totalDiscount / passengers.length,
+            couponDiscount: discount.couponDiscount / passengers.length,
+            seniorDiscount: discount.seniorDiscount / passengers.length,
             discountCode: discount.couponCode,
             isSenior: discount.isSenior,
             destinationStopId: trip.routeId,
+            emergencyPhone: passenger.emergencyPhone,
           }),
         })
       );
@@ -161,7 +226,7 @@ function CheckoutContent() {
 
       // Si el método de pago es Yappy, no procesamos el pago aquí
       // El botón Yappy lo manejará
-      if (formData.paymentMethod === "yappy") {
+      if (paymentMethod === "yappy") {
         // El pago se procesará cuando el usuario haga clic en el botón Yappy
         return;
       }
@@ -172,11 +237,11 @@ function CheckoutContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ticketId: ticketDataArray[0].ticket.id,
-          paymentMethod: formData.paymentMethod,
+          paymentMethod: paymentMethod,
           customerInfo: {
-            name: formData.passengerName,
-            email: formData.passengerEmail,
-            phone: formData.passengerPhone,
+            name: passengers[0].name,
+            email: passengers[0].email,
+            phone: passengers[0].phone,
           },
         }),
       });
@@ -232,68 +297,73 @@ function CheckoutContent() {
               onDiscountChange={setDiscount}
             />
 
-            <div className="bg-card p-6 rounded-lg shadow-md">
-              <h2 className="text-xl font-semibold mb-4">Información del Pasajero</h2>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium mb-2">Nombre Completo *</label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.passengerName}
-                    onChange={(e) => setFormData({ ...formData, passengerName: e.target.value })}
-                    className="w-full p-2 border rounded"
-                  />
+            {/* Passenger Forms */}
+            <div className="space-y-6">
+              {passengers.map((passenger, index) => (
+                <div key={passenger.seatId} className="bg-card p-6 rounded-lg shadow-md">
+                  <h2 className="text-xl font-semibold mb-4">
+                    Pasajero {index + 1} - Asiento {getSeatNumber(passenger.seatId)}
+                  </h2>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Nombre Completo *</label>
+                      <input
+                        type="text"
+                        required
+                        value={passenger.name}
+                        onChange={(e) => updatePassenger(index, "name", e.target.value)}
+                        className="w-full p-2 border rounded"
+                        placeholder="Nombre completo del pasajero"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Cédula *</label>
+                      <input
+                        type="text"
+                        required
+                        value={passenger.documentId}
+                        onChange={(e) => updatePassenger(index, "documentId", e.target.value)}
+                        placeholder="8-1234-5678"
+                        className="w-full p-2 border rounded"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Formato: 8-1234-5678
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Teléfono *</label>
+                      <input
+                        type="tel"
+                        required
+                        value={passenger.phone}
+                        onChange={(e) => updatePassenger(index, "phone", e.target.value)}
+                        className="w-full p-2 border rounded"
+                        placeholder="6000-0000"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Email (Opcional)</label>
+                      <input
+                        type="email"
+                        value={passenger.email}
+                        onChange={(e) => updatePassenger(index, "email", e.target.value)}
+                        className="w-full p-2 border rounded"
+                        placeholder="correo@ejemplo.com"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Teléfono de Emergencia (Opcional)</label>
+                      <input
+                        type="tel"
+                        value={passenger.emergencyPhone}
+                        onChange={(e) => updatePassenger(index, "emergencyPhone", e.target.value)}
+                        className="w-full p-2 border rounded"
+                        placeholder="6000-0000"
+                      />
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium mb-2">Email</label>
-                  <input
-                    type="email"
-                    value={formData.passengerEmail}
-                    onChange={(e) => setFormData({ ...formData, passengerEmail: e.target.value })}
-                    className="w-full p-2 border rounded"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-2">Teléfono</label>
-                  <input
-                    type="tel"
-                    value={formData.passengerPhone}
-                    onChange={(e) => setFormData({ ...formData, passengerPhone: e.target.value })}
-                    className="w-full p-2 border rounded"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-2">Tipo de Documento *</label>
-                  <select
-                    required
-                    value={formData.passengerDocumentType}
-                    onChange={(e) => setFormData({ ...formData, passengerDocumentType: e.target.value as "cedula" | "pasaporte" })}
-                    className="w-full p-2 border rounded"
-                  >
-                    <option value="cedula">Cédula</option>
-                    <option value="pasaporte">Pasaporte</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-2">
-                    {formData.passengerDocumentType === "cedula" ? "Cédula" : "Pasaporte"} *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.passengerDocumentId}
-                    onChange={(e) => setFormData({ ...formData, passengerDocumentId: e.target.value })}
-                    placeholder={formData.passengerDocumentType === "cedula" ? "8-1234-5678" : "A123456"}
-                    className="w-full p-2 border rounded"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {formData.passengerDocumentType === "cedula" 
-                      ? "Formato: 8-1234-5678" 
-                      : "Formato: A123456 (6-9 caracteres alfanuméricos)"}
-                  </p>
-                </div>
-              </div>
+              ))}
             </div>
 
             <div className="bg-card p-6 rounded-lg shadow-md">
@@ -305,8 +375,8 @@ function CheckoutContent() {
                       type="radio"
                       name="paymentMethod"
                       value={method}
-                      checked={formData.paymentMethod === method}
-                      onChange={(e) => setFormData({ ...formData, paymentMethod: e.target.value })}
+                      checked={paymentMethod === method}
+                      onChange={(e) => setPaymentMethod(e.target.value)}
                     />
                     <span className="capitalize">{method}</span>
                   </label>
@@ -373,14 +443,14 @@ function CheckoutContent() {
                   <span>{formatCurrency(total)}</span>
                 </div>
               </div>
-              {formData.paymentMethod === "yappy" ? (
+              {paymentMethod === "yappy" ? (
                 <YappyPaymentButton
                   amount={subtotalAfterDiscount}
-                  description={`Boleto TDP - ${formData.passengerName}`}
+                  description={`Boleto TDP - ${passengers.length} pasajero${passengers.length > 1 ? 's' : ''}`}
                   customerInfo={{
-                    name: formData.passengerName,
-                    email: formData.passengerEmail,
-                    phone: formData.passengerPhone,
+                    name: passengers[0]?.name || "",
+                    email: passengers[0]?.email || "",
+                    phone: passengers[0]?.phone || "",
                   }}
                   ticketId={ticketId || undefined}
                   theme="orange"
@@ -395,16 +465,16 @@ function CheckoutContent() {
                   onError={(error) => {
                     alert(`Error: ${error}`);
                   }}
-                  disabled={processing || !formData.passengerName || !formData.passengerDocumentId}
+                  disabled={processing || passengers.some(p => !p.name || !p.documentId || !p.phone)}
                 />
-              ) : formData.paymentMethod === "paguelofacil" ? (
+              ) : paymentMethod === "paguelofacil" ? (
                 <PagueloFacilPaymentButton
                   amount={subtotalAfterDiscount}
-                  description={`Boleto TDP - ${formData.passengerName}`}
+                  description={`Boleto TDP - ${passengers.length} pasajero${passengers.length > 1 ? 's' : ''}`}
                   customerInfo={{
-                    name: formData.passengerName,
-                    email: formData.passengerEmail,
-                    phone: formData.passengerPhone,
+                    name: passengers[0]?.name || "",
+                    email: passengers[0]?.email || "",
+                    phone: passengers[0]?.phone || "",
                   }}
                   ticketId={ticketId || undefined}
                   onSuccess={(transactionId) => {
@@ -417,12 +487,12 @@ function CheckoutContent() {
                   onError={(error) => {
                     alert(`Error: ${error}`);
                   }}
-                  disabled={processing || !formData.passengerName || !formData.passengerDocumentId}
+                  disabled={processing || passengers.some(p => !p.name || !p.documentId || !p.phone)}
                 />
               ) : (
                 <button
                   type="submit"
-                  disabled={processing || !formData.passengerName || !formData.passengerDocumentId}
+                  disabled={processing || passengers.some(p => !p.name || !p.documentId || !p.phone)}
                   className="w-full px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 font-semibold disabled:opacity-50"
                 >
                   {processing ? "Procesando..." : "Completar Compra"}
