@@ -5,6 +5,9 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { SeatSelector, SeatStatus } from "@/components/public/SeatSelector";
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 interface Seat {
   id: string;
   number: string;
