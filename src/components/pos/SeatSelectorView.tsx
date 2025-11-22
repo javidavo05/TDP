@@ -222,7 +222,10 @@ export function SeatSelectorView({
                           : "Disponible"
                       }`}
                     >
-                      {seat.number}
+                      {seat.type === "bathroom" ? "Baño" :
+                       seat.type === "stair" ? "Escalera" :
+                       seat.type === "aisle" ? "" :
+                       seat.number}
                     </button>
                   );
                 })}

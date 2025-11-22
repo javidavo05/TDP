@@ -380,7 +380,10 @@ export function SeatSelector({
                 "Disponible"
               }`}
             >
-              {getSeatIcon(seat) || <span>{seat.number}</span>}
+              {seat.type === "bathroom" ? "Baño" :
+               seat.type === "stair" ? "Escalera" :
+               seat.type === "aisle" ? "" :
+               getSeatIcon(seat) || <span>{seat.number}</span>}
               {getSeatIcon(seat) && (
                 <span className="absolute bottom-0 text-[8px] font-bold">{seat.number}</span>
               )}
