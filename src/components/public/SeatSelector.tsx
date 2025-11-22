@@ -70,11 +70,27 @@ const sizeMultipliers = {
 const getSeatWidth = (type: string): number => {
   if (type === "double") return SEAT_WIDTH * 1.5;
   if (type === "aisle") return SEAT_WIDTH * 0.3;
-  if (type === "stair") return SEAT_WIDTH * 0.6;
+  // Stair uses same base size as builder: 280 (140*2) * multiplier
+  if (type === "stair") return 280 * sizeMultipliers.stairs;
+  // Bathroom uses same base size as builder: 224 (112*2) * multiplier
+  if (type === "bathroom") return 224 * sizeMultipliers.seats;
   return SEAT_WIDTH;
 };
 
 const getSeatSize = (seat: Seat): { width: number; height: number } => {
+  // Use same base sizes as builder
+  if (seat.type === "stair") {
+    return {
+      width: 280 * sizeMultipliers.stairs,
+      height: 180 * sizeMultipliers.stairs, // 90*2 = 180
+    };
+  }
+  if (seat.type === "bathroom") {
+    return {
+      width: 224 * sizeMultipliers.seats, // 112*2 = 224
+      height: 180 * sizeMultipliers.seats, // 90*2 = 180
+    };
+  }
   return {
     width: getSeatWidth(seat.type),
     height: SEAT_HEIGHT,
@@ -188,6 +204,18 @@ export function SeatSelector({
   const logicalToPhysicalHeight = (logicalHeight: number) => logicalHeight * getScaleY();
 
   const getSeatColor = (seat: Seat): string => {
+    // Non-selectable elements: neutral colors, no hover, part of design
+    if (seat.type === "stair") {
+      return "bg-gray-300 text-gray-600 cursor-default pointer-events-none";
+    }
+    if (seat.type === "bathroom") {
+      return "bg-gray-300 text-gray-600 cursor-default pointer-events-none";
+    }
+    if (seat.type === "aisle") {
+      return "bg-gray-200 text-gray-500 cursor-default pointer-events-none";
+    }
+    
+    // Selectable elements
     if (allSelectedSeatIds.includes(seat.id)) {
       return "bg-primary text-primary-foreground ring-2 ring-primary ring-offset-2";
     }
@@ -202,12 +230,6 @@ export function SeatSelector({
     }
     if (seat.status === "extra_space") {
       return "bg-green-500 text-green-foreground";
-    }
-    if (seat.status === "stair") {
-      return "bg-orange-500 text-orange-foreground cursor-not-allowed";
-    }
-    if (seat.status === "aisle") {
-      return "bg-gray-400 text-gray-foreground cursor-not-allowed";
     }
     if (seat.id === hoveredSeat) {
       return "bg-primary/70 text-primary-foreground";
@@ -334,7 +356,9 @@ export function SeatSelector({
               onMouseEnter={() => clickable && setHoveredSeat(seat.id)}
               onMouseLeave={() => setHoveredSeat(null)}
               disabled={!clickable}
-              className={`absolute ${getSeatColor(seat)} rounded transition-all duration-200 flex items-center justify-center text-xs font-semibold shadow-md hover:shadow-lg hover:scale-110 disabled:hover:scale-100 disabled:cursor-not-allowed ${
+              className={`absolute ${getSeatColor(seat)} rounded transition-all duration-200 flex items-center justify-center text-xs font-semibold ${
+                clickable ? "shadow-md hover:shadow-lg hover:scale-110" : ""
+              } disabled:hover:scale-100 disabled:cursor-not-allowed ${
                 isSelected ? "animate-pulse" : ""
               }`}
               style={{

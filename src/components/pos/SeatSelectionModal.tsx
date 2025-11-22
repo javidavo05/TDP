@@ -123,6 +123,18 @@ export function SeatSelectionModal({
   const scale = Math.min(1, 1000 / maxX, 700 / maxY);
 
   const getSeatColor = (seat: SeatWithStatus): string => {
+    // Non-selectable elements: neutral colors, no hover, part of design
+    if (seat.type === "stair") {
+      return "bg-gray-300 text-gray-600 cursor-default pointer-events-none";
+    }
+    if (seat.type === "bathroom") {
+      return "bg-gray-300 text-gray-600 cursor-default pointer-events-none";
+    }
+    if (seat.type === "aisle") {
+      return "bg-gray-200 text-gray-500 cursor-default pointer-events-none";
+    }
+    
+    // Selectable elements
     if (internalSelectedSeatIds.includes(seat.id)) {
       return "bg-blue-500 text-white ring-4 ring-blue-300";
     }
@@ -141,7 +153,9 @@ export function SeatSelectionModal({
   const getSeatSize = (seat: SeatWithStatus): string => {
     if (seat.type === "double") return "w-16 h-12";
     if (seat.type === "aisle") return "w-8 h-12";
-    if (seat.type === "stair") return "w-10 h-12";
+    // Stair should be larger - use same proportions as builder (280x180 base)
+    if (seat.type === "stair") return "w-20 h-14"; // Larger size
+    if (seat.type === "bathroom") return "w-16 h-14"; // Larger size
     return "w-12 h-12";
   };
 
@@ -200,7 +214,9 @@ export function SeatSelectionModal({
                         key={seat.id}
                         onClick={() => isClickable && handleSeatClick(seat.id)}
                         disabled={!isClickable}
-                        className={`absolute ${getSeatSize(seat)} ${getSeatColor(seat)} rounded transition-all duration-200 flex items-center justify-center text-xs font-semibold shadow-md hover:shadow-lg hover:scale-110 disabled:hover:scale-100 disabled:cursor-not-allowed`}
+                        className={`absolute ${getSeatSize(seat)} ${getSeatColor(seat)} rounded transition-all duration-200 flex items-center justify-center text-xs font-semibold ${
+                          isClickable ? "shadow-md hover:shadow-lg hover:scale-110" : ""
+                        } disabled:hover:scale-100 disabled:cursor-not-allowed`}
                         style={{
                           left: `${seat.x * scale}px`,
                           top: `${seat.y * scale}px`,
