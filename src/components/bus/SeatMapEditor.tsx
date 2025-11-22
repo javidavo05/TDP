@@ -2231,8 +2231,11 @@ export function SeatMapEditor({
                   />
                 ) : (
                   <>
-                    {getSeatIcon(seat.type) || <span>{seat.number}</span>}
-                    {getSeatIcon(seat.type) && (
+                    {seat.type === "bathroom" ? "Baño" :
+                     seat.type === "stair" ? "Escalera" :
+                     seat.type === "aisle" ? "" :
+                     getSeatIcon(seat.type) || <span>{seat.number}</span>}
+                    {getSeatIcon(seat.type) && seat.type !== "bathroom" && seat.type !== "stair" && seat.type !== "aisle" && (
                       <span className="absolute bottom-0 text-[8px] font-bold">{seat.number}</span>
                     )}
                     <button
